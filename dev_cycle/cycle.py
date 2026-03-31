@@ -332,16 +332,16 @@ def check_cycle(cycle_dir: Path) -> dict:
         else:
             ready.append(f"{filename}: {label}")
 
-    # Section checks on final-summary (locale-aware)
+    # Section checks on final-summary (locale-aware via alias helper)
+    from .i18n import has_section
     section_warnings = []
     fs = cycle_dir / "final-summary.md"
     if fs.exists() and not _is_placeholder(fs):
         content = fs.read_text()
-        # Check for overview in en or ja
-        if "## Overview" not in content and "## 概要" not in content:
-            section_warnings.append(f"final-summary.md: missing ## Overview / ## 概要")
-        if "## Changes" not in content and "## 変更点" not in content:
-            section_warnings.append(f"final-summary.md: missing ## Changes / ## 変更点")
+        if not has_section(content, "overview"):
+            section_warnings.append(f"final-summary.md: missing overview section")
+        if not has_section(content, "changes"):
+            section_warnings.append(f"final-summary.md: missing changes section")
 
     all_issues = missing + placeholder + section_warnings
     can_finalize = not any(

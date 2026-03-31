@@ -118,3 +118,37 @@ def resolve_lang(cli_lang: str | None = None, config_lang: str | None = None) ->
     if config_lang:
         return config_lang
     return DEFAULT_LANG
+
+
+# Locale-aware section aliases for state/quality detection.
+# Maps semantic key → list of heading variants across all supported locales.
+SECTION_ALIASES: dict[str, list[str]] = {
+    "goal": ["## Goal", "## 目的"],
+    "overview": ["## Overview", "## 概要"],
+    "changes": ["## Changes", "## 変更点"],
+    "what_was_done": ["## What Was Done", "## 実装内容"],
+    "context": ["## Context", "## 背景"],
+    "scope": ["## Scope", "## スコープ"],
+}
+
+# Placeholder patterns that indicate unfilled template content
+PLACEHOLDER_PATTERNS: list[str] = [
+    "<!-- Describe", "<!-- 目的を記述",
+    "<!-- Why is this needed", "<!-- なぜ必要か",
+]
+
+
+def has_section(content: str, section_key: str) -> bool:
+    """Check if content has a section matching any locale variant."""
+    for alias in SECTION_ALIASES.get(section_key, []):
+        if alias in content:
+            return True
+    return False
+
+
+def has_placeholder(content: str) -> bool:
+    """Check if content has any locale placeholder pattern."""
+    for p in PLACEHOLDER_PATTERNS:
+        if p in content:
+            return True
+    return False

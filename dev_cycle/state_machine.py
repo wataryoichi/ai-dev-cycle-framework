@@ -112,15 +112,12 @@ def determine_state(cycle_dir: Path) -> State:
         return State.REVIEW_NEEDED
 
     if phase == "started":
-        # request.md always has version/title from template, so check for Goal content
+        from .i18n import has_section, has_placeholder
         req = cycle_dir / "request.md"
         req_has_goal = False
         if req.exists():
             content = req.read_text()
-            # Check for goal section in any language, without placeholder comments
-            has_goal_header = ("## Goal" in content or "## 目的" in content)
-            has_placeholder = ("<!-- Describe" in content or "<!-- 目的を記述" in content)
-            req_has_goal = has_goal_header and not has_placeholder
+            req_has_goal = has_section(content, "goal") and not has_placeholder(content)
         if req_has_goal:
             return State.IMPLEMENTING
         return State.STARTED
