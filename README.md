@@ -1,194 +1,159 @@
 # AI Dev Cycle Framework
 
-A framework for structured AI-assisted development cycles. Claude implements, Codex reviews, and every cycle is logged for traceability.
+Claude→Codex→Claude orchestrator. Runs development cycles with automatic
+phase progression and interactive prompts at decision points.
 
-## Overview
-
-This framework provides:
-
-- **Structured cycles** — each unit of work gets a dedicated directory with standardized artifacts
-- **Implementation tracking** — requests, summaries, reviews, and follow-ups are recorded
-- **Review integration** — Codex review results are captured and systematically addressed
-- **Version history** — cumulative log of all changes across versions
-- **CLI tooling** — simple commands to start, finalize, and query cycles
-- **Claude Code commands** — slash commands for seamless workflow integration
-
-## Quick Start
-
-### 1. Add configuration
-
-Create `devcycle.config.json` in your project root:
-
-```json
-{
-  "project_name": "your-project",
-  "cycle_root": "ops/dev-cycles",
-  "version_history_file": "docs/version-history.md",
-  "default_branch": "main",
-  "reviewers": ["codex"],
-  "store_git_diff": true,
-  "store_git_status": true
-}
-```
-
-### 2. Create the cycle directory
+## Install
 
 ```bash
-mkdir -p ops/dev-cycles
+pip install -e .
+devcycle doctor
 ```
 
-### 3. Start a cycle
+## Usage
 
 ```bash
-python3 -m dev_cycle.cli start-cycle --version v0.1.0 --title "add user authentication"
+devcycle run --version v0.1.0 --title "add user auth"
 ```
 
-### 4. Implement and record
+This runs the full cycle:
+1. Creates cycle directory with templates
+2. Pauses for implementation (you write code + fill summary)
+3. Prepares review and shows Codex prompt
+4. Pauses for Codex review input
+5. Imports review, generates followup draft
+6. Pauses for fix decisions
+7. Checks quality and finalizes
 
-- Edit `request.md` with the full goal
-- Implement the changes
-- Update `claude-implementation-summary.md`
-
-### 5. Review
-
-Run Codex review and save results to `codex-review.md` in the cycle directory.
-
-### 6. Finalize
+At each pause, you choose what to do (numbered choices). To continue later:
 
 ```bash
-python3 -m dev_cycle.cli finalize-cycle --cycle-dir ops/dev-cycles/<cycle_id>
+devcycle resume
 ```
 
-## CLI Reference
+To see where you are:
+
+```bash
+devcycle status
+```
+
+## Shell Completion
+
+```bash
+source <(devcycle completion bash)   # bash
+source <(devcycle completion zsh)    # zsh
+```
+
+## Commands
+
+### Primary
 
 | Command | Description |
 |---------|-------------|
-| `start-cycle --version V --title T` | Create a new cycle directory with templates |
-| `finalize-cycle --cycle-dir DIR` | Mark cycle complete, update index and history |
-| `show-index` | List all cycles (supports `--version`, `--status`, `--format markdown`) |
-| `latest-cycle` | Print the path of the most recent cycle |
-| `append-history --cycle-dir DIR` | Manually append a cycle to version history |
-| `setup-hooks` | Configure git to use project hooks (auto-tag) |
+| `run` | Run a full cycle with interactive prompts |
+| `resume` | Continue an interrupted cycle |
+| `status` | Show state, progress, and available actions |
+| `doctor` | Check environment setup |
 
-All commands accept `--project-root` to specify a different project root.
+### Manual Mode (Advanced)
 
-## Version Tag Automation
+For step-by-step control:
 
-A post-commit hook automatically creates git tags when the commit message starts
-with `vX.Y.Z`.
+| Command | Description |
+|---------|-------------|
+| `start` | Start a new cycle |
+| `prepare` | Prepare for Codex review |
+| `review-loop` | Import review (prepare + import + finalize) |
+| `followup` | Generate follow-up draft from findings |
+| `next` | Show next command to run |
+| `check` | Quality report |
+| `finalize` | Complete cycle (`--strict`) |
+| `handoff` | Show Codex prompt (no phase change) |
+| `import-review` | Import review output |
+| `index` | List cycles |
+| `latest` | Latest cycle path |
 
-### Setup
+All commands support `--json`.
 
-```bash
-python3 -m dev_cycle.cli setup-hooks   # or: make setup
+## How It Works
+
+### States
+
+The orchestrator tracks these states:
+
+| State | What happens |
+|-------|-------------|
+| `started` | Fill request.md |
+| `implementing` | Write code, fill implementation summary |
+| `review_needed` | Auto: prepares review |
+| `review_pending` | You provide Codex review output |
+| `followup_needed` | Auto: generates followup draft |
+| `followup_ready` | You decide: accept/defer/reject findings |
+| `fix_needed` | Apply fixes |
+| `ready_to_finalize` | Choose: strict finalize, normal, or re-review |
+| `completed` | Done |
+
+States marked "Auto" execute without prompting. Others present numbered choices.
+
+### Decision Points
+
+At each decision point, you see something like:
+
+```
+Choose next action:
+  1. Implementation is done, proceed to review
+  2. Not done yet, exit (resume later)
 ```
 
-This sets `core.hooksPath` to `scripts/hooks/`, enabling the auto-tag hook.
+### `followup` — What It Generates
 
-### Usage
+Reads `codex-review.md`, writes `codex-followup.md`:
 
-```bash
-git commit -m "v0.2.0: add show-index filtering"
-# → [auto-tag] Created tag: v0.2.0
+```markdown
+## Accepted
+- [HIGH] finding: <!-- action taken -->
+- [MEDIUM] finding: <!-- action taken -->
 
-git push --follow-tags   # pushes commit + tag together
+## Deferred
+## Rejected
 ```
 
-- Only triggers when the message starts with `vX.Y.Z`
-- Skips if the tag already exists
-- Normal commits (no version prefix) are unaffected
+This is a draft. Move items to Deferred/Rejected as needed.
 
-## Cycle Artifacts
+## Dual Output
 
-Each cycle directory contains:
+Each cycle produces both Markdown (human-readable) and JSON (machine-readable):
 
 ```
 ops/dev-cycles/<cycle_id>/
-  meta.json                          # Cycle metadata
-  request.md                         # What was requested
-  claude-implementation-summary.md   # What was implemented
-  codex-review.md                    # Review findings
-  codex-followup.md                  # How feedback was addressed
-  final-summary.md                   # Final summary
-  self-application-notes.md          # Self-hosting impact notes
-  git-status.txt                     # Git status snapshot
-  git.diff                           # Git diff snapshot
+  meta.json                          # state, timestamps, orchestrator history
+  request.md                         # what was requested
+  claude-implementation-summary.md   # what was implemented
+  codex-review.md                    # review findings
+  codex-followup.md                  # accept/defer/reject decisions
+  final-summary.md                   # cycle summary
 ```
 
-## Claude Code Commands
+`meta.json` contains all structured data including orchestrator state and transition history.
 
-Copy `.claude/commands/` to your project to get these slash commands:
-
-| Command | Purpose |
-|---------|---------|
-| `/devcycle-start` | Start a new cycle |
-| `/devcycle-finalize` | Finalize the current cycle |
-| `/devcycle-review-fix` | Process Codex review feedback |
-| `/devcycle-full-loop` | Guided full cycle from start to finish |
-
-## Using the Framework on Itself
-
-This project is a **self-applying framework** — it uses its own dev cycle tooling
-to manage its own development.
-
-### How it works
-
-The repository ships with `devcycle.config.json` pre-configured for self-application.
-Every improvement to the framework is tracked as a cycle in `ops/dev-cycles/`, using
-the same CLI and commands that any other project would use.
-
-### Self-application setup
-
-No special setup is needed. The config, commands, and directories are already in place.
-
-### Typical self-development loop
+## Pipe / CI / Hook
 
 ```bash
-# 1. Start a cycle
-python3 -m dev_cycle.cli start-cycle --version v0.1.0 --title "add show-index filtering"
+# stdin pipe for review import
+cat codex-output.txt | devcycle review-loop --generate-followup
 
-# 2. Implement the feature (Claude or manual)
+# CI samples included
+.github/workflows/devcycle-check.yml     # PR quality gate
+.github/workflows/devcycle-finalize.yml  # merge finalize
 
-# 3. Run Codex review on the changes
-
-# 4. Address review feedback
-
-# 5. Finalize
-python3 -m dev_cycle.cli finalize-cycle --cycle-dir $(python3 -m dev_cycle.cli latest-cycle)
+# Review hook
+export DEVCYCLE_CODEX_CMD="codex review --prompt"
+cp scripts/hooks/post-prepare-review.sample scripts/hooks/post-prepare-review
 ```
 
-### Generated logs
+## Self-Hosting
 
-Self-application cycles produce the same artifacts as any project. The
-`self-application-notes.md` file is used to note whether a cycle improves the
-framework's features or its own development workflow.
-
-### Constraints
-
-- The first few cycles may involve manual steps as the framework bootstraps.
-- Self-application uses the same config structure — no special-case logic.
-- Cycle logs in `ops/dev-cycles/` serve double duty as both development records
-  and usage examples for the framework.
-
-### Further reading
-
-- [Self-Hosting Guide](docs/self-hosting.md) — detailed setup and workflow
-- [Operational Playbook](docs/operational-playbook.md) — day-to-day rules
-
-## Project Structure
-
-```
-.claude/commands/          # Claude Code slash commands
-dev_cycle/                 # Python package (CLI + core logic)
-docs/                      # Documentation
-  self-hosting.md          # Self-application guide
-  operational-playbook.md  # Operational rules
-  version-history.md       # Cumulative version log
-ops/dev-cycles/            # Cycle log storage
-scripts/hooks/             # Git hooks (auto-tag)
-devcycle.config.json       # Self-application config
-Makefile                   # Setup shortcuts
-```
+This project uses its own tooling. See [docs/self-hosting.md](docs/self-hosting.md).
 
 ## License
 

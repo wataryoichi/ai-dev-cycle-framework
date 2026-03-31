@@ -1,0 +1,23 @@
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   .claude/commands/devcycle-finalize.md
+	modified:   .claude/commands/devcycle-full-loop.md
+	modified:   .claude/commands/devcycle-review-fix.md
+	modified:   .claude/commands/devcycle-start.md
+	modified:   .gitignore
+	modified:   README.md
+	modified:   dev_cycle/cli.py
+	modified:   dev_cycle/cycle.py
+	modified:   docs/operational-playbook.md
+	modified:   docs/self-hosting.md
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	dev_cycle/review_orchestrator.py
+	ops/dev-cycles/v0.1.0_20260331-034536_bootstrap-self-hosting-flow/
+
+no changes added to commit (use "git add" and/or "git commit -a")

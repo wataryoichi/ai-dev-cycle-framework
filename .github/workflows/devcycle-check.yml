@@ -1,0 +1,58 @@
+name: Dev Cycle Quality Check
+
+on:
+  pull_request:
+    paths:
+      - 'ops/dev-cycles/**'
+      - 'dev_cycle/**'
+
+jobs:
+  check-cycle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Find latest cycle
+        id: find
+        run: |
+          CYCLE=$(python3 -m dev_cycle.cli latest-cycle 2>/dev/null) || true
+          if [ -z "$CYCLE" ]; then
+            echo "found=false" >> $GITHUB_OUTPUT
+            echo "No cycle found."
+          else
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "Cycle: $CYCLE"
+          fi
+
+      - name: Check cycle quality
+        if: steps.find.outputs.found == 'true'
+        id: check
+        run: |
+          python3 -m dev_cycle.cli check-cycle --json > cycle-check.json 2>&1 || true
+          cat cycle-check.json
+
+      - name: Post results
+        if: steps.find.outputs.found == 'true'
+        run: |
+          echo "## Dev Cycle Quality Check" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat cycle-check.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Enforce strict quality
+        if: steps.find.outputs.found == 'true'
+        run: |
+          python3 -c "
+          import json, sys
+          d = json.load(open('cycle-check.json'))
+          if not d.get('strict_ready', False):
+              print('Not strict-ready. Fill in required files.')
+              for issue in d.get('placeholder', []) + d.get('missing', []):
+                  print(f'  - {issue}')
+              sys.exit(1)
+          print('Strict-ready.')
+          "

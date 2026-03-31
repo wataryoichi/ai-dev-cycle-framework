@@ -1,0 +1,50 @@
+name: Dev Cycle Finalize on Merge
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ops/dev-cycles/**'
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check if latest cycle needs finalization
+        id: check
+        run: |
+          PHASE=$(python3 -m dev_cycle.cli next-step --json | python3 -c "import sys,json; print(json.load(sys.stdin)['phase'])")
+          echo "phase=$PHASE" >> $GITHUB_OUTPUT
+          echo "Current phase: $PHASE"
+
+      - name: Finalize cycle
+        if: steps.check.outputs.phase != 'completed'
+        run: |
+          python3 -m dev_cycle.cli finalize-cycle --json | tee finalize-result.json
+
+      - name: Commit finalize changes
+        if: steps.check.outputs.phase != 'completed'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ops/dev-cycles/ docs/version-history.md
+          git diff --cached --quiet || git commit -m "chore: finalize dev cycle [skip ci]"
+          git push
+
+      - name: Post result
+        if: steps.check.outputs.phase != 'completed'
+        run: |
+          echo "## Dev Cycle Finalized" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat finalize-result.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

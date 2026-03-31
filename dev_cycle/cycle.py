@@ -3,21 +3,148 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import Config
 
-CYCLE_FILES = [
-    "meta.json",
-    "request.md",
-    "claude-implementation-summary.md",
-    "codex-review.md",
-    "codex-followup.md",
-    "final-summary.md",
-    "self-application-notes.md",
+
+class StrictFinalizeError(Exception):
+    """Raised when strict finalize is requested but quality checks fail."""
+    def __init__(self, warnings: list[str]):
+        self.warnings = warnings
+        super().__init__(f"Strict finalize failed: {len(warnings)} issue(s)")
+
+
+class NoCyclesError(Exception):
+    """Raised when no cycle directories exist."""
+    pass
+
+# Ordered phases a cycle moves through.
+# These names are canonical — used in CLI, docs, and commands.
+PHASES = [
+    "started",
+    "implementation_done",
+    "review_pending",
+    "review_imported",
+    "review_done",
+    "followup_done",
+    "completed",
 ]
+
+# Phase → (what to do, suggested command, then command)
+NEXT_STEPS: dict[str, tuple[str, str, str]] = {
+    "started": (
+        "Implement the changes, then update claude-implementation-summary.md",
+        "devcycle prepare",
+        "",
+    ),
+    "implementation_done": (
+        "Prepare the cycle for Codex review",
+        "devcycle prepare",
+        "",
+    ),
+    "review_pending": (
+        "Run Codex review and import the results",
+        "devcycle review-loop --from-file codex-output.txt --generate-followup",
+        "",
+    ),
+    "review_imported": (
+        "Finalize the review phase",
+        "devcycle finalize-review",
+        "devcycle followup",
+    ),
+    "review_done": (
+        "Generate follow-up draft, address findings, then finalize",
+        "devcycle followup",
+        "devcycle check",
+    ),
+    "followup_done": (
+        "Check quality and finalize the cycle",
+        "devcycle check",
+        "devcycle finalize --strict",
+    ),
+    "completed": (
+        "Cycle is complete. Start a new one when ready.",
+        "devcycle start --version <V> --title <T>",
+        "",
+    ),
+}
+
+REVIEW_TEMPLATE = """\
+# Codex Review
+
+## Reviewer
+Codex
+
+## Summary
+<!-- Overall review summary -->
+
+## Findings
+
+### High
+<!-- Critical issues that must be fixed -->
+
+### Medium
+<!-- Important but not blocking -->
+
+### Low
+<!-- Minor suggestions or style issues -->
+
+## Raw Notes
+<!-- Optional: paste raw review output here -->
+"""
+
+FOLLOWUP_TEMPLATE = """\
+# Codex Follow-up
+
+## Accepted
+<!-- - Finding: what was changed -->
+
+## Deferred
+<!-- - Finding: reason for deferral -->
+
+## Rejected
+<!-- - Finding: reason for rejection -->
+
+## Additional Notes
+<!-- Any extra context -->
+"""
+
+IMPLEMENTATION_SUMMARY_TEMPLATE = """\
+# Claude Implementation Summary
+
+## What Was Done
+<!-- Describe the implementation -->
+
+## Key Decisions
+<!-- Any trade-offs or design choices -->
+
+## Changed Files
+<!-- List of files added/modified/deleted -->
+
+## Testing
+<!-- How was this verified? -->
+"""
+
+FINAL_SUMMARY_TEMPLATE = """\
+# Final Summary
+
+## Overview
+<!-- One-paragraph summary of this cycle -->
+
+## Changes
+<!-- List of key changes -->
+
+## Verification
+<!-- How the changes were verified -->
+
+## Remaining Issues
+<!-- Any follow-up items -->
+"""
 
 
 def _now_iso() -> str:
@@ -40,6 +167,63 @@ def _run_git(args: list[str], cwd: Path) -> str:
         return ""
 
 
+def _read_meta(cycle_dir: Path) -> dict:
+    meta_path = cycle_dir / "meta.json"
+    if not meta_path.exists():
+        raise FileNotFoundError(f"No meta.json in {cycle_dir}")
+    return json.loads(meta_path.read_text())
+
+
+def _write_meta(cycle_dir: Path, meta: dict) -> None:
+    (cycle_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
+
+
+def _update_phase(meta: dict, phase: str) -> dict:
+    """Update phase, preserving backward compatibility."""
+    meta["phase"] = phase
+    if phase == "completed":
+        meta["status"] = "completed"
+    elif phase == "started":
+        meta["status"] = "started"
+    else:
+        meta["status"] = "in_progress"
+    return meta
+
+
+# Lines that appear in templates but aren't real content
+_TEMPLATE_LINES = frozenset({"Codex", "- (none)"})
+
+
+def _is_placeholder(path: Path) -> bool:
+    """Check if a file is still in its initial template state."""
+    if not path.exists():
+        return True
+    content = path.read_text().strip()
+    if not content:
+        return True
+    lines = [l for l in content.split("\n") if l.strip() and not l.strip().startswith("#")]
+    return all(
+        l.strip().startswith("<!--") or l.strip() in _TEMPLATE_LINES
+        for l in lines
+    )
+
+
+def _resolve_cycle_dir(cfg: Config, cycle_dir_arg: str | None) -> Path:
+    """Resolve a cycle dir from argument or fall back to latest.
+
+    Raises NoCyclesError if no cycles exist and no dir was specified.
+    """
+    if cycle_dir_arg:
+        p = Path(cycle_dir_arg)
+        if not p.is_absolute():
+            p = cfg.project_root / p
+        return p
+    latest = find_latest_cycle(cfg)
+    if not latest:
+        raise NoCyclesError("No cycles found. Start one with: start-cycle")
+    return latest
+
+
 def start_cycle(cfg: Config, version: str, title: str) -> Path:
     """Create a new cycle directory with initial files."""
     cid = _cycle_id(version, title)
@@ -51,25 +235,32 @@ def start_cycle(cfg: Config, version: str, title: str) -> Path:
         "version": version,
         "title": title,
         "status": "started",
+        "phase": "started",
         "started_at": _now_iso(),
         "finished_at": None,
         "project": cfg.project_name,
     }
-    (cycle_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
+    _write_meta(cycle_dir, meta)
+
     (cycle_dir / "request.md").write_text(
         f"# Request — {title}\n\n"
         f"**Version:** {version}\n\n"
         "## Goal\n\n<!-- Describe the goal of this cycle -->\n\n"
-        "## Notes\n\n<!-- Any constraints or context -->\n"
+        "## Context\n\n<!-- Why is this needed? What problem does it solve? -->\n\n"
+        "## Scope\n\n<!-- What's in scope and out of scope -->\n\n"
+        "## Notes\n\n<!-- Any constraints, dependencies, or references -->\n"
     )
-    for name in [
-        "claude-implementation-summary.md",
-        "codex-review.md",
-        "codex-followup.md",
-        "final-summary.md",
-        "self-application-notes.md",
-    ]:
-        (cycle_dir / name).write_text(f"# {name.replace('.md','').replace('-',' ').title()}\n\n<!-- To be filled -->\n")
+    (cycle_dir / "claude-implementation-summary.md").write_text(IMPLEMENTATION_SUMMARY_TEMPLATE)
+    (cycle_dir / "codex-review.md").write_text(REVIEW_TEMPLATE)
+    (cycle_dir / "codex-followup.md").write_text(FOLLOWUP_TEMPLATE)
+    (cycle_dir / "final-summary.md").write_text(FINAL_SUMMARY_TEMPLATE)
+    (cycle_dir / "self-application-notes.md").write_text(
+        "# Self-Application Notes\n\n"
+        "## Change Type\n\n"
+        "<!-- user-facing feature / internal tooling / documentation -->\n\n"
+        "## Impact on Framework Development\n\n"
+        "<!-- How does this improve the framework's own dev workflow? -->\n"
+    )
 
     if cfg.store_git_status:
         status = _run_git(["status"], cfg.project_root)
@@ -84,16 +275,73 @@ def start_cycle(cfg: Config, version: str, title: str) -> Path:
     return cycle_dir
 
 
-def finalize_cycle(cfg: Config, cycle_dir: Path) -> None:
-    """Mark a cycle as completed, update index and version history."""
-    meta_path = cycle_dir / "meta.json"
-    if not meta_path.exists():
-        raise FileNotFoundError(f"No meta.json in {cycle_dir}")
+def check_cycle(cycle_dir: Path) -> dict:
+    """Check cycle quality. Returns dict with ready/issues/phase."""
+    meta = _read_meta(cycle_dir)
+    phase = meta.get("phase", meta.get("status", "started"))
 
-    meta = json.loads(meta_path.read_text())
-    meta["status"] = "completed"
+    files = {
+        "request.md": "Request",
+        "claude-implementation-summary.md": "Implementation summary",
+        "codex-review.md": "Codex review",
+        "codex-followup.md": "Codex follow-up",
+        "final-summary.md": "Final summary",
+    }
+
+    ready = []
+    placeholder = []
+    missing = []
+
+    for filename, label in files.items():
+        path = cycle_dir / filename
+        if not path.exists():
+            missing.append(f"{filename}: {label} — missing")
+        elif _is_placeholder(path):
+            placeholder.append(f"{filename}: {label} — still template")
+        else:
+            ready.append(f"{filename}: {label}")
+
+    # Section checks on final-summary
+    section_warnings = []
+    fs = cycle_dir / "final-summary.md"
+    if fs.exists() and not _is_placeholder(fs):
+        content = fs.read_text()
+        for section in ["## Overview", "## Changes"]:
+            if section not in content:
+                section_warnings.append(f"final-summary.md: missing {section}")
+
+    all_issues = missing + placeholder + section_warnings
+    can_finalize = not any(
+        f.startswith("claude-implementation-summary.md") or f.startswith("final-summary.md")
+        for f in missing + placeholder
+    )
+
+    return {
+        "phase": phase,
+        "ready": ready,
+        "placeholder": placeholder,
+        "missing": missing,
+        "section_warnings": section_warnings,
+        "all_issues": all_issues,
+        "can_finalize": can_finalize and not section_warnings,
+    }
+
+
+def finalize_cycle(cfg: Config, cycle_dir: Path, strict: bool = False) -> list[str]:
+    """Mark a cycle as completed, update index and version history.
+
+    Returns a list of warnings (empty if all looks good).
+    """
+    meta = _read_meta(cycle_dir)
+    result = check_cycle(cycle_dir)
+    warnings = result["all_issues"]
+
+    if strict and warnings:
+        raise StrictFinalizeError(warnings)
+
+    _update_phase(meta, "completed")
     meta["finished_at"] = _now_iso()
-    meta_path.write_text(json.dumps(meta, indent=2) + "\n")
+    _write_meta(cycle_dir, meta)
 
     if cfg.store_git_status:
         status = _run_git(["status"], cfg.project_root)
@@ -106,6 +354,58 @@ def finalize_cycle(cfg: Config, cycle_dir: Path) -> None:
 
     _append_index(cfg, meta)
     _append_version_history(cfg, meta, cycle_dir)
+
+    return warnings
+
+
+def next_step(cycle_dir: Path) -> dict:
+    """Determine the next action based on current phase + quality."""
+    from .review_importer import count_findings
+
+    meta = _read_meta(cycle_dir)
+    phase = meta.get("phase", meta.get("status", "started"))
+    action, command, then = NEXT_STEPS.get(phase, ("Unknown phase", "", ""))
+    quality = check_cycle(cycle_dir)
+    findings = count_findings(cycle_dir)
+    strict_ready = not quality["all_issues"]
+    rereview = _detect_rereview_hint(cycle_dir)
+
+    return {
+        "cycle_id": meta["cycle_id"],
+        "version": meta["version"],
+        "title": meta["title"],
+        "phase": phase,
+        "action": action,
+        "command": command,
+        "then": then,
+        "cycle_dir": str(cycle_dir),
+        "ready_count": len(quality["ready"]),
+        "placeholder_count": len(quality["placeholder"]),
+        "missing_count": len(quality["missing"]),
+        "findings_high": findings["high"],
+        "findings_medium": findings["medium"],
+        "findings_low": findings["low"],
+        "findings_total": findings["total"],
+        "can_finalize": quality["can_finalize"],
+        "strict_ready": strict_ready,
+        "rereview_hint": rereview,
+    }
+
+
+def _detect_rereview_hint(cycle_dir: Path) -> str:
+    """Heuristic: suggest re-review if HIGH findings were accepted."""
+    followup = cycle_dir / "codex-followup.md"
+    if not followup.exists() or _is_placeholder(followup):
+        return "unknown"
+    content = followup.read_text()
+    accepted_match = re.search(r"## Accepted\s*\n(.*?)(?=\n## |\Z)", content, re.DOTALL)
+    if accepted_match:
+        accepted = accepted_match.group(1)
+        if "[HIGH]" in accepted:
+            return "recommended"
+        if "[MEDIUM]" in accepted:
+            return "optional"
+    return "not_needed"
 
 
 def _append_index(cfg: Config, meta: dict) -> None:
@@ -123,7 +423,10 @@ def _append_version_history(cfg: Config, meta: dict, cycle_dir: Path) -> None:
     if final_summary.exists():
         content = final_summary.read_text().strip()
         lines = content.split("\n")
-        summary_text = "\n".join(l for l in lines if not l.startswith("# "))
+        summary_text = "\n".join(
+            l for l in lines
+            if not l.strip().startswith("#") and not l.strip().startswith("<!--")
+        )
 
     entry = (
         f"\n### {meta['version']} — {meta['title']}\n\n"
@@ -164,3 +467,11 @@ def find_latest_cycle(cfg: Config) -> Path | None:
         reverse=True,
     )
     return dirs[0] if dirs else None
+
+
+def get_cycle_phase(cycle_dir: Path) -> str:
+    """Get the current phase of a cycle, with backward compat."""
+    meta = _read_meta(cycle_dir)
+    if "phase" in meta:
+        return meta["phase"]
+    return meta.get("status", "started")

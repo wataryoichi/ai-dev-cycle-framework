@@ -1,0 +1,1594 @@
+diff --git a/.claude/commands/devcycle-finalize.md b/.claude/commands/devcycle-finalize.md
+index 6210490..87504af 100644
+--- a/.claude/commands/devcycle-finalize.md
++++ b/.claude/commands/devcycle-finalize.md
+@@ -1,34 +1,58 @@
+ Finalize the current development cycle.
+ 
+-## Instructions
++Arguments (optional cycle dir): $ARGUMENTS
++
++## Pre-finalize Checklist
++
++Before finalizing, verify:
++
++- [ ] Implementation is complete (or explicitly scoped down)
++- [ ] `claude-implementation-summary.md` describes what was done
++- [ ] `codex-review.md` has review findings (or review was intentionally skipped)
++- [ ] `codex-followup.md` documents how findings were addressed
++- [ ] No temporary or debug code left in the codebase
+ 
+-1. Find the current cycle directory. If not provided as an argument, use:
++## Steps
++
++1. **Find the cycle directory**:
+ 
+ ```bash
+-python3 -m dev_cycle.cli latest-cycle
++python3 -m dev_cycle.cli latest-cycle -v
+ ```
+ 
+-Arguments (optional cycle dir): $ARGUMENTS
+-
+-2. Update `final-summary.md` in the cycle directory with:
+-   - A concise summary of what was implemented
+-   - List of changed files
+-   - Verification steps taken or recommended
+-   - Remaining issues or follow-up items
++2. **Write final-summary.md** with:
++   - **Overview**: One paragraph summarizing this cycle's outcome
++   - **Changes**: Key changes made (files, features, fixes)
++   - **Verification**: How the changes were tested
++   - **Remaining Issues**: Anything left for follow-up cycles
+ 
+-3. If this is a self-application cycle (changes to the framework itself), add a
+-   `## Self-Application Impact` section describing how this improves the framework's
+-   own development workflow.
++3. If this is a **self-application cycle** (changes to the framework itself),
++   update `self-application-notes.md`:
++   - What type of change (user-facing feature / internal tooling / docs)
++   - How it improves the framework's own development workflow
+ 
+-4. Run the finalize-cycle CLI:
++4. **Run finalize**:
+ 
+ ```bash
+-python3 -m dev_cycle.cli finalize-cycle --cycle-dir <CYCLE_DIR>
++python3 -m dev_cycle.cli finalize-cycle
+ ```
+ 
+-5. Verify that:
+-   - `meta.json` status is now `completed`
+-   - `index.jsonl` has a new entry
+-   - `docs/version-history.md` has been updated
+-
+-6. Report completion with a brief summary of the cycle.
++The CLI will:
++- Set `meta.json` status to `completed`
++- Capture final git status and diff
++- Append to `ops/dev-cycles/index.jsonl`
++- Append to `docs/version-history.md`
++- Warn about any empty/placeholder files
++
++5. **Verify** after finalize:
++   - Check that `index.jsonl` has the new entry
++   - Check that `docs/version-history.md` was updated
++   - Confirm `meta.json` shows `"status": "completed"`
++
++## Notes
++
++- The CLI warns about placeholder files but does not block finalization.
++- For lightweight cycles (typo fixes), it's OK to skip review — the warnings
++  are informational.
++- If you need to re-finalize, delete the entry from `index.jsonl` first to
++  avoid duplicates.
+diff --git a/.claude/commands/devcycle-full-loop.md b/.claude/commands/devcycle-full-loop.md
+index 0fd3c71..4be2a04 100644
+--- a/.claude/commands/devcycle-full-loop.md
++++ b/.claude/commands/devcycle-full-loop.md
+@@ -1,48 +1,85 @@
+ Run a full development cycle from start to finish.
+ 
+-This command guides through the complete cycle. Not all steps are fully automated —
+-some require human or external input (e.g., Codex review).
++This guides through the complete standard flow. Some steps require human input
++(marked with 👤).
+ 
+-## Arguments
++Arguments (version, title, and goal): $ARGUMENTS
+ 
+-$ARGUMENTS
++---
+ 
+-## Standard Flow
++## Phase 1 — Start
+ 
+-### Step 1 — Start Cycle
+-Run `/devcycle-start` with the version and title for this cycle.
++```bash
++python3 -m dev_cycle.cli start-cycle --version <VERSION> --title "<TITLE>"
++```
+ 
+-### Step 2 — Fill request.md
+-Document the goal, context, and constraints in the cycle's `request.md`.
++Fill in `request.md`:
++- Goal, context, scope, and notes
+ 
+-### Step 3 — Implement
+-Carry out the implementation work described in the request.
++## Phase 2 — Implement
+ 
+-### Step 4 — Update claude-implementation-summary.md
+-Write a summary of what was implemented, key decisions, and any trade-offs.
++Carry out the implementation. When done, update `claude-implementation-summary.md`:
++- What was done, key decisions, changed files, testing
+ 
+-### Step 5 — Codex Review
+-Pause and instruct the user to run Codex review. Suggest:
++## Phase 3 — Prepare for Review
+ 
++```bash
++python3 -m dev_cycle.cli prepare-review
+ ```
+-Review the changes in this cycle. Focus on correctness, edge cases, and maintainability.
+-Write your findings to <cycle_dir>/codex-review.md.
++
++This sets the phase to `review_pending` and shows the review file path.
++
++## Phase 4 — Codex Review 👤
++
++**This step requires human action.**
++
++Run Codex review on the changes. Suggested prompt for Codex:
++
++> Review the changes in this cycle. Focus on correctness, edge cases, and
++> maintainability. Write your findings to `<cycle_dir>/codex-review.md`
++> using the High/Medium/Low severity structure.
++
++After review results are in `codex-review.md`, finalize the review:
++
++```bash
++python3 -m dev_cycle.cli finalize-review
+ ```
+ 
+-### Step 6 — Address Review Feedback
+-Run `/devcycle-review-fix` to process the Codex review results.
+-
+-### Step 7 — Finalize
+-Run `/devcycle-finalize` to complete the cycle, update the index, and append
+-to version history.
+-
+-### Step 8 — Verify
+-Confirm all cycle artifacts are in place:
+-- meta.json (status: completed)
+-- request.md
+-- claude-implementation-summary.md
+-- codex-review.md
+-- codex-followup.md
+-- final-summary.md
+-- index.jsonl updated
+-- version-history.md updated
++## Phase 5 — Address Review Feedback
++
++Read `codex-review.md` and for each finding:
++- **Accept** → implement the fix
++- **Defer** → note for future
++- **Reject** → explain why
++
++Update `codex-followup.md` with decisions.
++
++## Phase 6 — Finalize
++
++Write `final-summary.md`, then:
++
++```bash
++python3 -m dev_cycle.cli finalize-cycle
++```
++
++## Phase 7 — Verify
++
++Confirm:
++- `meta.json` shows `"status": "completed"`
++- `index.jsonl` has new entry
++- `docs/version-history.md` is updated
++- All cycle files are filled in
++
++---
++
++## Phase Summary
++
++| Phase | Action | Who |
++|-------|--------|-----|
++| 1. Start | `start-cycle` + fill request | Claude |
++| 2. Implement | Code changes + summary | Claude |
++| 3. Prepare Review | `prepare-review` | Claude |
++| 4. Review | Run Codex, paste results | 👤 Human + Codex |
++| 5. Follow-up | Classify + fix | Claude |
++| 6. Finalize | `finalize-cycle` | Claude |
++| 7. Verify | Check artifacts | Claude |
+diff --git a/.claude/commands/devcycle-review-fix.md b/.claude/commands/devcycle-review-fix.md
+index 7b9e811..a64d2a2 100644
+--- a/.claude/commands/devcycle-review-fix.md
++++ b/.claude/commands/devcycle-review-fix.md
+@@ -1,38 +1,59 @@
+-Review and address Codex review feedback for the current cycle.
++Process Codex review feedback and implement fixes.
+ 
+-## Instructions
++Arguments (optional cycle dir): $ARGUMENTS
++
++## Steps
+ 
+-1. Find the current cycle directory. If not provided as an argument, use:
++1. **Find the cycle directory**. If not provided, use the latest:
+ 
+ ```bash
+-python3 -m dev_cycle.cli latest-cycle
++python3 -m dev_cycle.cli latest-cycle -v
+ ```
+ 
+-Arguments (optional cycle dir): $ARGUMENTS
++2. **Read codex-review.md** in the cycle directory. Understand each finding.
+ 
+-2. Read `codex-review.md` in the cycle directory.
++3. **Classify each finding** into one of three categories:
+ 
+-3. For each review item, decide:
+-   - **Accept**: The feedback is valid — implement the fix
+-   - **Defer**: Valid but out of scope for this cycle — note for follow-up
+-   - **Reject**: The feedback is incorrect or not applicable — explain why
++   - **Accept**: The feedback is valid. Implement the fix.
++   - **Defer**: Valid but out of scope for this cycle. Note it for future work.
++   - **Reject**: Incorrect or not applicable. Explain why.
+ 
+-4. Implement all accepted fixes.
++4. **Implement accepted fixes**. For each:
++   - Make the code change
++   - Verify it works
++   - Note what was changed
+ 
+-5. Update `codex-followup.md` with:
++5. **Update codex-followup.md** with the structured result:
+ 
+ ```markdown
+ ## Accepted
+-- [item]: [what was changed]
++- [Finding]: [What was changed and why]
+ 
+ ## Deferred
+-- [item]: [reason for deferral]
++- [Finding]: [Reason — e.g., out of scope, needs separate cycle]
+ 
+ ## Rejected
+-- [item]: [reason for rejection]
++- [Finding]: [Reason — e.g., already handled by X, not applicable because Y]
++
++## Additional Notes
++- [Any extra context for future reference]
++```
++
++6. **Update claude-implementation-summary.md** if the fixes changed the
++   implementation significantly.
++
++7. **Update final-summary.md** if the review led to meaningful changes
++   in the overall outcome of this cycle.
++
++8. **When done**, advance to finalize:
++
++```bash
++python3 -m dev_cycle.cli finalize-cycle
+ ```
+ 
+-6. Update `claude-implementation-summary.md` if the fixes changed the implementation
+-   significantly.
++## Guidelines
+ 
+-7. Report what was changed and what remains.
++- Don't accept everything blindly. Evaluate each finding on its merits.
++- For deferred items, be specific about why — "out of scope" alone is not enough.
++- If a finding reveals a deeper issue, note it even if you defer the fix.
++- The followup file should be useful to someone reading the cycle log months later.
+diff --git a/.claude/commands/devcycle-start.md b/.claude/commands/devcycle-start.md
+index b302b15..c361cf2 100644
+--- a/.claude/commands/devcycle-start.md
++++ b/.claude/commands/devcycle-start.md
+@@ -1,25 +1,47 @@
+-Start a new development cycle for this project.
++Start a new development cycle.
+ 
+-## Instructions
++Arguments (version and title): $ARGUMENTS
+ 
+-1. Run the start-cycle CLI to create a new cycle directory:
++## Steps
++
++1. **Start the cycle** by running:
+ 
+ ```bash
+ python3 -m dev_cycle.cli start-cycle --version <VERSION> --title "<TITLE>"
+ ```
+ 
+-Ask the user for the version and title if not provided as arguments: $ARGUMENTS
++If version or title were not provided in the arguments, ask the user.
++
++2. **Fill in request.md** in the new cycle directory:
++   - **Goal**: What this cycle should achieve (1-3 sentences)
++   - **Context**: Why this work is needed, what problem it solves
++   - **Scope**: What's in scope and what's explicitly out of scope
++   - **Notes**: Dependencies, references to issues, prior cycles, or constraints
++
++3. **Investigate before implementing**:
++   - Read the relevant existing code
++   - Check for related TODOs or open issues
++   - Identify files that will need changes
++   - Note any risks or unknowns
++
++4. **Implement the changes**.
+ 
+-2. Confirm the created cycle directory exists and list its contents.
++5. **Update claude-implementation-summary.md** with:
++   - What was done (the implementation, not the request)
++   - Key decisions and trade-offs
++   - List of changed files
++   - How it was tested or verified
++
++6. **Advance to review** by running:
++
++```bash
++python3 -m dev_cycle.cli prepare-review
++```
+ 
+-3. Open `request.md` in the new cycle directory and fill it in:
+-   - Describe the goal of this cycle
+-   - Note any constraints, dependencies, or context
+-   - Reference related issues or prior cycles if applicable
++This marks the cycle as `review_pending` and shows next steps for Codex review.
+ 
+-4. Before starting implementation, do a brief investigation:
+-   - Read relevant existing code
+-   - Check for related issues or TODOs
+-   - Note anything that might affect the approach
++## Reminders
+ 
+-5. Report the cycle directory path and confirm readiness to begin implementation.
++- Keep the request focused. One cycle = one coherent unit of work.
++- If the scope grows, consider splitting into multiple cycles.
++- The implementation summary should be useful to a reviewer who hasn't seen the code changes.
+diff --git a/.gitignore b/.gitignore
+index 0d36833..a918bc8 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -13,5 +13,3 @@ venv/
+ *.swo
+ *~
+ .DS_Store
+-# test
+-# dup test
+diff --git a/README.md b/README.md
+index 6429f08..596dbee 100644
+--- a/README.md
++++ b/README.md
+@@ -1,16 +1,20 @@
+ # AI Dev Cycle Framework
+ 
+-A framework for structured AI-assisted development cycles. Claude implements, Codex reviews, and every cycle is logged for traceability.
++A framework for structured AI-assisted development cycles. Claude implements,
++Codex reviews, and every cycle is logged for traceability.
+ 
+-## Overview
++This is a **semi-automated orchestration** framework — not a fully autonomous loop.
++A human triggers Codex review and decides when to advance phases, but the framework
++makes each step clear and keeps records automatically.
+ 
+-This framework provides:
++## Overview
+ 
+ - **Structured cycles** — each unit of work gets a dedicated directory with standardized artifacts
+-- **Implementation tracking** — requests, summaries, reviews, and follow-ups are recorded
+-- **Review integration** — Codex review results are captured and systematically addressed
++- **Phase tracking** — know exactly where each cycle stands (started → review → followup → completed)
++- **Review orchestration** — prepare, capture, and follow up on Codex review
++- **Automatic logging** — requests, summaries, reviews, and follow-ups are recorded
+ - **Version history** — cumulative log of all changes across versions
+-- **CLI tooling** — simple commands to start, finalize, and query cycles
++- **CLI tooling** — commands for every phase of the cycle
+ - **Claude Code commands** — slash commands for seamless workflow integration
+ 
+ ## Quick Start
+@@ -37,138 +41,163 @@ Create `devcycle.config.json` in your project root:
+ mkdir -p ops/dev-cycles
+ ```
+ 
+-### 3. Start a cycle
++### 3. Run a cycle
+ 
+ ```bash
+-python3 -m dev_cycle.cli start-cycle --version v0.1.0 --title "add user authentication"
+-```
++# Start
++python3 -m dev_cycle.cli start-cycle --version v0.1.0 --title "add user auth"
+ 
+-### 4. Implement and record
++# ... implement ...
+ 
+-- Edit `request.md` with the full goal
+-- Implement the changes
+-- Update `claude-implementation-summary.md`
++# Prepare for review
++python3 -m dev_cycle.cli prepare-review
+ 
+-### 5. Review
++# ... run Codex review, paste into codex-review.md ...
+ 
+-Run Codex review and save results to `codex-review.md` in the cycle directory.
++# Mark review done
++python3 -m dev_cycle.cli finalize-review
+ 
+-### 6. Finalize
++# ... address feedback, update codex-followup.md ...
+ 
+-```bash
+-python3 -m dev_cycle.cli finalize-cycle --cycle-dir ops/dev-cycles/<cycle_id>
++# Finalize
++python3 -m dev_cycle.cli finalize-cycle
+ ```
+ 
++## Standard Flow
++
++```
++start-cycle ──→ implement ──→ prepare-review ──→ Codex review (👤)
++                                                       │
++finalize-cycle ←── fix + followup ←── finalize-review ←┘
++```
++
++| Phase | Command | Who |
++|-------|---------|-----|
++| Start | `start-cycle` | Claude |
++| Implement | (code changes) | Claude |
++| Prepare review | `prepare-review` | Claude |
++| Review | Run Codex, paste results | Human + Codex |
++| Finalize review | `finalize-review` | Claude |
++| Follow-up | Classify findings, fix | Claude |
++| Finalize | `finalize-cycle` | Claude |
++
++Each command prints **next steps** so you always know what to do next.
++
+ ## CLI Reference
+ 
+ | Command | Description |
+ |---------|-------------|
+-| `start-cycle --version V --title T` | Create a new cycle directory with templates |
+-| `finalize-cycle --cycle-dir DIR` | Mark cycle complete, update index and history |
+-| `show-index` | List all cycles (supports `--version`, `--status`, `--format markdown`) |
+-| `latest-cycle` | Print the path of the most recent cycle |
+-| `append-history --cycle-dir DIR` | Manually append a cycle to version history |
+-| `setup-hooks` | Configure git to use project hooks (auto-tag) |
+-
+-All commands accept `--project-root` to specify a different project root.
+-
+-## Version Tag Automation
++| `start-cycle --version V --title T` | Create a new cycle with templates |
++| `prepare-review [--cycle-dir DIR]` | Prepare cycle for Codex review |
++| `finalize-review [--cycle-dir DIR]` | Mark review done, prepare follow-up |
++| `finalize-cycle [--cycle-dir DIR]` | Complete cycle, update index + history |
++| `show-index` | List cycles (`--version`, `--status`, `--phase`, `--live`, `--format markdown`) |
++| `latest-cycle [-v]` | Print latest cycle path (or details with `-v`) |
++| `mark-phase --phase P` | Manually set cycle phase |
++| `append-history [--cycle-dir DIR]` | Manually append to version history |
++| `setup-hooks` | Configure git auto-tag hook |
+ 
+-A post-commit hook automatically creates git tags when the commit message starts
+-with `vX.Y.Z`.
++Most commands default to the latest cycle when `--cycle-dir` is omitted.
+ 
+-### Setup
++## Phase Tracking
+ 
+-```bash
+-python3 -m dev_cycle.cli setup-hooks   # or: make setup
+-```
++Each cycle tracks its current phase in `meta.json`:
+ 
+-This sets `core.hooksPath` to `scripts/hooks/`, enabling the auto-tag hook.
++| Phase | Meaning |
++|-------|---------|
++| `started` | Cycle created, implementation in progress |
++| `implementation_done` | Code done, ready for review |
++| `review_pending` | Review requested, waiting for results |
++| `review_done` | Review complete, follow-up needed |
++| `followup_done` | Review findings addressed |
++| `completed` | Cycle finalized |
+ 
+-### Usage
++View current phases with:
+ 
+ ```bash
+-git commit -m "v0.2.0: add show-index filtering"
+-# → [auto-tag] Created tag: v0.2.0
+-
+-git push --follow-tags   # pushes commit + tag together
++python3 -m dev_cycle.cli show-index --live --format markdown
+ ```
+ 
+-- Only triggers when the message starts with `vX.Y.Z`
+-- Skips if the tag already exists
+-- Normal commits (no version prefix) are unaffected
+-
+ ## Cycle Artifacts
+ 
+-Each cycle directory contains:
+-
+ ```
+ ops/dev-cycles/<cycle_id>/
+-  meta.json                          # Cycle metadata
++  meta.json                          # Cycle metadata + phase
+   request.md                         # What was requested
+   claude-implementation-summary.md   # What was implemented
+-  codex-review.md                    # Review findings
+-  codex-followup.md                  # How feedback was addressed
++  codex-review.md                    # Review findings (High/Medium/Low)
++  codex-followup.md                  # Accepted/Deferred/Rejected decisions
+   final-summary.md                   # Final summary
+   self-application-notes.md          # Self-hosting impact notes
+   git-status.txt                     # Git status snapshot
+   git.diff                           # Git diff snapshot
+ ```
+ 
+-## Claude Code Commands
++## Version Tag Automation
++
++A post-commit hook auto-creates git tags when the commit message starts with `vX.Y.Z`.
++
++```bash
++python3 -m dev_cycle.cli setup-hooks   # one-time setup (or: make setup)
++
++git commit -m "v0.2.0: add review orchestration"
++# → [auto-tag] Created tag: v0.2.0
++
++git push --follow-tags
++```
+ 
+-Copy `.claude/commands/` to your project to get these slash commands:
++## Claude Code Commands
+ 
+ | Command | Purpose |
+ |---------|---------|
+-| `/devcycle-start` | Start a new cycle |
+-| `/devcycle-finalize` | Finalize the current cycle |
+-| `/devcycle-review-fix` | Process Codex review feedback |
+-| `/devcycle-full-loop` | Guided full cycle from start to finish |
++| `/devcycle-start` | Start a new cycle with guided steps |
++| `/devcycle-finalize` | Finalize with pre-check and verification |
++| `/devcycle-review-fix` | Process review feedback systematically |
++| `/devcycle-full-loop` | Guided full cycle with phase table |
+ 
+ ## Using the Framework on Itself
+ 
+-This project is a **self-applying framework** — it uses its own dev cycle tooling
+-to manage its own development.
++This project uses its own tooling to manage its own development — a self-applying
++framework.
+ 
+ ### How it works
+ 
+-The repository ships with `devcycle.config.json` pre-configured for self-application.
+-Every improvement to the framework is tracked as a cycle in `ops/dev-cycles/`, using
+-the same CLI and commands that any other project would use.
++The repo ships with `devcycle.config.json` pre-configured. Every improvement is
++tracked as a cycle in `ops/dev-cycles/`, using the same CLI any project would use.
+ 
+-### Self-application setup
+-
+-No special setup is needed. The config, commands, and directories are already in place.
+-
+-### Typical self-development loop
++### Self-development loop
+ 
+ ```bash
+-# 1. Start a cycle
+-python3 -m dev_cycle.cli start-cycle --version v0.1.0 --title "add show-index filtering"
++# Start a cycle for framework improvement
++python3 -m dev_cycle.cli start-cycle --version v0.2.0 --title "improve review orchestration"
+ 
+-# 2. Implement the feature (Claude or manual)
++# Implement the improvement
++# ...
+ 
+-# 3. Run Codex review on the changes
++# Prepare and run review
++python3 -m dev_cycle.cli prepare-review
++# Run Codex review, paste results
++python3 -m dev_cycle.cli finalize-review
+ 
+-# 4. Address review feedback
++# Address feedback
++# ...
+ 
+-# 5. Finalize
+-python3 -m dev_cycle.cli finalize-cycle --cycle-dir $(python3 -m dev_cycle.cli latest-cycle)
++# Finalize
++python3 -m dev_cycle.cli finalize-cycle
+ ```
+ 
+-### Generated logs
+-
+-Self-application cycles produce the same artifacts as any project. The
+-`self-application-notes.md` file is used to note whether a cycle improves the
+-framework's features or its own development workflow.
+-
+-### Constraints
++### What's automated, what's manual
+ 
+-- The first few cycles may involve manual steps as the framework bootstraps.
+-- Self-application uses the same config structure — no special-case logic.
+-- Cycle logs in `ops/dev-cycles/` serve double duty as both development records
+-  and usage examples for the framework.
++| Step | Automated? |
++|------|-----------|
++| Cycle directory + templates | Automated |
++| Phase transitions | Automated |
++| Index + history updates | Automated |
++| Git snapshots | Automated |
++| Quality warnings | Automated |
++| Codex review execution | Manual (human triggers) |
++| Review paste into cycle | Manual |
++| Accept/defer/reject decisions | Manual (Claude or human) |
+ 
+ ### Further reading
+ 
+@@ -180,6 +209,10 @@ framework's features or its own development workflow.
+ ```
+ .claude/commands/          # Claude Code slash commands
+ dev_cycle/                 # Python package (CLI + core logic)
++  cli.py                   # CLI entry point
++  config.py                # Configuration loading
++  cycle.py                 # Core cycle operations
++  review_orchestrator.py   # Review phase management
+ docs/                      # Documentation
+   self-hosting.md          # Self-application guide
+   operational-playbook.md  # Operational rules
+diff --git a/dev_cycle/cli.py b/dev_cycle/cli.py
+index bbc751c..e932676 100644
+--- a/dev_cycle/cli.py
++++ b/dev_cycle/cli.py
+@@ -8,56 +8,165 @@ import sys
+ from pathlib import Path
+ 
+ from .config import Config
+-from .cycle import find_latest_cycle, finalize_cycle, load_index, start_cycle
++from .cycle import (
++    _resolve_cycle_dir,
++    _read_meta,
++    _update_phase,
++    _write_meta,
++    find_latest_cycle,
++    finalize_cycle,
++    get_cycle_phase,
++    load_index,
++    start_cycle,
++)
++from .review_orchestrator import finalize_review, prepare_review
++
++
++def _resolve_dir(cfg: Config, cycle_dir_arg: str | None) -> Path:
++    return _resolve_cycle_dir(cfg, cycle_dir_arg)
+ 
+ 
+ def cmd_start_cycle(args: argparse.Namespace) -> None:
+     cfg = Config.load(Path(args.project_root))
+     cycle_dir = start_cycle(cfg, args.version, args.title)
+     print(f"Cycle started: {cycle_dir}")
++    print()
++    print("Next steps:")
++    print(f"  1. Edit {cycle_dir}/request.md — describe the goal")
++    print(f"  2. Implement the changes")
++    print(f"  3. Update {cycle_dir}/claude-implementation-summary.md")
++    print(f"  4. Run: python3 -m dev_cycle.cli prepare-review")
+ 
+ 
+ def cmd_finalize_cycle(args: argparse.Namespace) -> None:
+     cfg = Config.load(Path(args.project_root))
+-    cycle_dir = Path(args.cycle_dir)
+-    if not cycle_dir.is_absolute():
+-        cycle_dir = cfg.project_root / cycle_dir
+-    finalize_cycle(cfg, cycle_dir)
++    cycle_dir = _resolve_dir(cfg, args.cycle_dir)
++    warnings = finalize_cycle(cfg, cycle_dir)
++    if warnings:
++        print("Warnings:")
++        for w in warnings:
++            print(f"  ⚠ {w}")
++        print()
+     print(f"Cycle finalized: {cycle_dir}")
+ 
+ 
+ def cmd_show_index(args: argparse.Namespace) -> None:
+     cfg = Config.load(Path(args.project_root))
+-    entries = load_index(cfg)
++
++    if args.live:
++        # Scan cycle dirs directly instead of index.jsonl
++        entries = _scan_live_cycles(cfg)
++    else:
++        entries = load_index(cfg)
+ 
+     if args.version:
+         entries = [e for e in entries if e.get("version") == args.version]
+     if args.status:
+         entries = [e for e in entries if e.get("status") == args.status]
++    if args.phase:
++        entries = [e for e in entries if e.get("phase") == args.phase]
+ 
+     if not entries:
+         print("No cycles found.")
+         return
+ 
+     if args.format == "markdown":
+-        print("| Cycle ID | Version | Title | Status |")
+-        print("|----------|---------|-------|--------|")
++        print("| Cycle ID | Version | Title | Phase | Status |")
++        print("|----------|---------|-------|-------|--------|")
+         for e in entries:
+-            print(f"| `{e['cycle_id']}` | {e['version']} | {e['title']} | {e['status']} |")
++            phase = e.get("phase", e.get("status", "?"))
++            print(f"| `{e['cycle_id']}` | {e['version']} | {e['title']} | {phase} | {e['status']} |")
+     else:
+         for e in entries:
+             print(json.dumps(e))
+ 
+ 
++def _scan_live_cycles(cfg: Config) -> list[dict]:
++    """Scan cycle directories for current state (not just finalized index)."""
++    root = cfg.cycle_root_path
++    if not root.exists():
++        return []
++    entries = []
++    for d in sorted(root.iterdir()):
++        meta_path = d / "meta.json"
++        if d.is_dir() and meta_path.exists():
++            entries.append(json.loads(meta_path.read_text()))
++    return entries
++
++
+ def cmd_latest_cycle(args: argparse.Namespace) -> None:
+     cfg = Config.load(Path(args.project_root))
+     latest = find_latest_cycle(cfg)
+-    if latest:
+-        print(latest)
+-    else:
++    if not latest:
+         print("No cycles found.", file=sys.stderr)
+         sys.exit(1)
+ 
++    if args.verbose:
++        meta = _read_meta(latest)
++        phase = meta.get("phase", meta.get("status", "?"))
++        print(f"Path:    {latest}")
++        print(f"Cycle:   {meta['cycle_id']}")
++        print(f"Version: {meta['version']}")
++        print(f"Title:   {meta['title']}")
++        print(f"Phase:   {phase}")
++        print(f"Started: {meta.get('started_at', 'N/A')}")
++    else:
++        print(latest)
++
++
++def cmd_prepare_review(args: argparse.Namespace) -> None:
++    cfg = Config.load(Path(args.project_root))
++    cycle_dir = _resolve_dir(cfg, args.cycle_dir)
++    info = prepare_review(cfg, cycle_dir)
++
++    print(f"Review prepared for cycle: {info['cycle_id']}")
++    print(f"  Version: {info['version']}")
++    print(f"  Title:   {info['title']}")
++    print(f"  Branch:  {info['branch']}")
++    print(f"  Phase:   {info['phase']}")
++    print()
++    print(f"Review file: {info['review_file']}")
++    print()
++    print("Next steps:")
++    print("  1. Run Codex review on the current changes")
++    print(f"  2. Paste review findings into {info['review_file']}")
++    print(f"  3. Run: python3 -m dev_cycle.cli finalize-review")
++    if info["recent_commits"]:
++        print()
++        print("Recent commits:")
++        for line in info["recent_commits"].split("\n")[:5]:
++            print(f"  {line}")
++
++
++def cmd_finalize_review(args: argparse.Namespace) -> None:
++    cfg = Config.load(Path(args.project_root))
++    cycle_dir = _resolve_dir(cfg, args.cycle_dir)
++    warnings = finalize_review(cfg, cycle_dir)
++
++    if warnings:
++        print("Warnings:")
++        for w in warnings:
++            print(f"  ⚠ {w}")
++        print()
++
++    print(f"Review finalized: {cycle_dir}")
++    print()
++    print("Next steps:")
++    print(f"  1. Review {cycle_dir}/codex-review.md")
++    print(f"  2. For each finding: accept, defer, or reject")
++    print(f"  3. Update {cycle_dir}/codex-followup.md with decisions")
++    print(f"  4. Implement accepted fixes")
++    print(f"  5. Run: python3 -m dev_cycle.cli finalize-cycle")
++
++
++def cmd_mark_phase(args: argparse.Namespace) -> None:
++    cfg = Config.load(Path(args.project_root))
++    cycle_dir = _resolve_dir(cfg, args.cycle_dir)
++    meta = _read_meta(cycle_dir)
++    _update_phase(meta, args.phase)
++    _write_meta(cycle_dir, meta)
++    print(f"Phase updated to: {args.phase}")
++
+ 
+ def cmd_setup_hooks(args: argparse.Namespace) -> None:
+     import subprocess
+@@ -74,22 +183,16 @@ def cmd_setup_hooks(args: argparse.Namespace) -> None:
+     except subprocess.CalledProcessError as e:
+         print(f"Failed to configure hooks: {e}", file=sys.stderr)
+         sys.exit(1)
+-    print(f"Git hooks path set to scripts/hooks/")
++    print("Git hooks path set to scripts/hooks/")
+     hook = hooks_dir / "post-commit"
+     if hook.exists():
+-        print(f"  post-commit: auto-tag on vX.Y.Z commit messages")
++        print("  post-commit: auto-tag on vX.Y.Z commit messages")
+ 
+ 
+ def cmd_append_history(args: argparse.Namespace) -> None:
+     cfg = Config.load(Path(args.project_root))
+-    cycle_dir = Path(args.cycle_dir)
+-    if not cycle_dir.is_absolute():
+-        cycle_dir = cfg.project_root / cycle_dir
+-    meta_path = cycle_dir / "meta.json"
+-    if not meta_path.exists():
+-        print(f"No meta.json in {cycle_dir}", file=sys.stderr)
+-        sys.exit(1)
+-    meta = json.loads(meta_path.read_text())
++    cycle_dir = _resolve_dir(cfg, args.cycle_dir)
++    meta = _read_meta(cycle_dir)
+     from .cycle import _append_version_history
+     _append_version_history(cfg, meta, cycle_dir)
+     print(f"Appended to {cfg.version_history_path}")
+@@ -112,30 +215,54 @@ def main() -> None:
+     p.add_argument("--title", required=True, help="Short cycle title")
+     p.set_defaults(func=cmd_start_cycle)
+ 
++    # prepare-review
++    p = sub.add_parser("prepare-review", help="Prepare a cycle for Codex review")
++    p.add_argument("--cycle-dir", default=None, help="Cycle directory (default: latest)")
++    p.set_defaults(func=cmd_prepare_review)
++
++    # finalize-review
++    p = sub.add_parser("finalize-review", help="Mark review as done, prepare for follow-up")
++    p.add_argument("--cycle-dir", default=None, help="Cycle directory (default: latest)")
++    p.set_defaults(func=cmd_finalize_review)
++
+     # finalize-cycle
+     p = sub.add_parser("finalize-cycle", help="Finalize a completed cycle")
+-    p.add_argument("--cycle-dir", required=True, help="Path to cycle directory")
++    p.add_argument("--cycle-dir", default=None, help="Cycle directory (default: latest)")
+     p.set_defaults(func=cmd_finalize_cycle)
+ 
+     # show-index
+     p = sub.add_parser("show-index", help="Show cycle index")
+     p.add_argument("--version", default=None, help="Filter by version")
+-    p.add_argument("--status", default=None, help="Filter by status (started/completed)")
++    p.add_argument("--status", default=None, help="Filter by status")
++    p.add_argument("--phase", default=None, help="Filter by phase")
++    p.add_argument("--live", action="store_true",
++                    help="Scan cycle directories instead of index.jsonl")
+     p.add_argument("--format", default="jsonl", choices=["jsonl", "markdown"],
+                     help="Output format")
+     p.set_defaults(func=cmd_show_index)
+ 
+     # latest-cycle
+     p = sub.add_parser("latest-cycle", help="Print path of most recent cycle")
++    p.add_argument("--verbose", "-v", action="store_true",
++                    help="Show cycle details instead of just the path")
+     p.set_defaults(func=cmd_latest_cycle)
+ 
++    # mark-phase
++    p = sub.add_parser("mark-phase", help="Manually set cycle phase")
++    p.add_argument("--cycle-dir", default=None, help="Cycle directory (default: latest)")
++    p.add_argument("--phase", required=True,
++                    choices=["started", "implementation_done", "review_pending",
++                             "review_done", "followup_done", "completed"],
++                    help="Phase to set")
++    p.set_defaults(func=cmd_mark_phase)
++
+     # setup-hooks
+     p = sub.add_parser("setup-hooks", help="Configure git to use project hooks (auto-tag)")
+     p.set_defaults(func=cmd_setup_hooks)
+ 
+     # append-history
+     p = sub.add_parser("append-history", help="Append cycle to version history")
+-    p.add_argument("--cycle-dir", required=True, help="Path to cycle directory")
++    p.add_argument("--cycle-dir", default=None, help="Cycle directory (default: latest)")
+     p.set_defaults(func=cmd_append_history)
+ 
+     args = parser.parse_args()
+diff --git a/dev_cycle/cycle.py b/dev_cycle/cycle.py
+index 2a6f162..c70f3a0 100644
+--- a/dev_cycle/cycle.py
++++ b/dev_cycle/cycle.py
+@@ -4,21 +4,94 @@ from __future__ import annotations
+ 
+ import json
+ import subprocess
++import sys
+ from datetime import datetime, timezone
+ from pathlib import Path
+ 
+ from .config import Config
+ 
+-CYCLE_FILES = [
+-    "meta.json",
+-    "request.md",
+-    "claude-implementation-summary.md",
+-    "codex-review.md",
+-    "codex-followup.md",
+-    "final-summary.md",
+-    "self-application-notes.md",
++# Ordered phases a cycle moves through
++PHASES = [
++    "started",
++    "implementation_done",
++    "review_pending",
++    "review_done",
++    "followup_done",
++    "completed",
+ ]
+ 
++REVIEW_TEMPLATE = """\
++# Codex Review
++
++## Reviewer
++Codex
++
++## Summary
++<!-- Overall review summary -->
++
++## Findings
++
++### High
++<!-- Critical issues that must be fixed -->
++
++### Medium
++<!-- Important but not blocking -->
++
++### Low
++<!-- Minor suggestions or style issues -->
++
++## Raw Notes
++<!-- Optional: paste raw review output here -->
++"""
++
++FOLLOWUP_TEMPLATE = """\
++# Codex Follow-up
++
++## Accepted
++<!-- - Finding: what was changed -->
++
++## Deferred
++<!-- - Finding: reason for deferral -->
++
++## Rejected
++<!-- - Finding: reason for rejection -->
++
++## Additional Notes
++<!-- Any extra context -->
++"""
++
++IMPLEMENTATION_SUMMARY_TEMPLATE = """\
++# Claude Implementation Summary
++
++## What Was Done
++<!-- Describe the implementation -->
++
++## Key Decisions
++<!-- Any trade-offs or design choices -->
++
++## Changed Files
++<!-- List of files added/modified/deleted -->
++
++## Testing
++<!-- How was this verified? -->
++"""
++
++FINAL_SUMMARY_TEMPLATE = """\
++# Final Summary
++
++## Overview
++<!-- One-paragraph summary of this cycle -->
++
++## Changes
++<!-- List of key changes -->
++
++## Verification
++<!-- How the changes were verified -->
++
++## Remaining Issues
++<!-- Any follow-up items -->
++"""
++
+ 
+ def _now_iso() -> str:
+     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+@@ -40,6 +113,56 @@ def _run_git(args: list[str], cwd: Path) -> str:
+         return ""
+ 
+ 
++def _read_meta(cycle_dir: Path) -> dict:
++    meta_path = cycle_dir / "meta.json"
++    if not meta_path.exists():
++        raise FileNotFoundError(f"No meta.json in {cycle_dir}")
++    return json.loads(meta_path.read_text())
++
++
++def _write_meta(cycle_dir: Path, meta: dict) -> None:
++    (cycle_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
++
++
++def _update_phase(meta: dict, phase: str) -> dict:
++    """Update phase, preserving backward compatibility."""
++    meta["phase"] = phase
++    # Keep top-level status in sync for backward compat
++    if phase == "completed":
++        meta["status"] = "completed"
++    elif phase == "started":
++        meta["status"] = "started"
++    else:
++        meta["status"] = "in_progress"
++    return meta
++
++
++def _is_placeholder(path: Path) -> bool:
++    """Check if a file is still in its initial template state."""
++    if not path.exists():
++        return True
++    content = path.read_text().strip()
++    if not content:
++        return True
++    lines = [l for l in content.split("\n") if l.strip() and not l.strip().startswith("#")]
++    # All remaining lines are HTML comments = still placeholder
++    return all(l.strip().startswith("<!--") for l in lines)
++
++
++def _resolve_cycle_dir(cfg: Config, cycle_dir_arg: str | None) -> Path:
++    """Resolve a cycle dir from argument or fall back to latest."""
++    if cycle_dir_arg:
++        p = Path(cycle_dir_arg)
++        if not p.is_absolute():
++            p = cfg.project_root / p
++        return p
++    latest = find_latest_cycle(cfg)
++    if not latest:
++        print("No cycles found. Start one with: start-cycle", file=sys.stderr)
++        sys.exit(1)
++    return latest
++
++
+ def start_cycle(cfg: Config, version: str, title: str) -> Path:
+     """Create a new cycle directory with initial files."""
+     cid = _cycle_id(version, title)
+@@ -51,25 +174,32 @@ def start_cycle(cfg: Config, version: str, title: str) -> Path:
+         "version": version,
+         "title": title,
+         "status": "started",
++        "phase": "started",
+         "started_at": _now_iso(),
+         "finished_at": None,
+         "project": cfg.project_name,
+     }
+-    (cycle_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
++    _write_meta(cycle_dir, meta)
++
+     (cycle_dir / "request.md").write_text(
+         f"# Request — {title}\n\n"
+         f"**Version:** {version}\n\n"
+         "## Goal\n\n<!-- Describe the goal of this cycle -->\n\n"
+-        "## Notes\n\n<!-- Any constraints or context -->\n"
++        "## Context\n\n<!-- Why is this needed? What problem does it solve? -->\n\n"
++        "## Scope\n\n<!-- What's in scope and out of scope -->\n\n"
++        "## Notes\n\n<!-- Any constraints, dependencies, or references -->\n"
++    )
++    (cycle_dir / "claude-implementation-summary.md").write_text(IMPLEMENTATION_SUMMARY_TEMPLATE)
++    (cycle_dir / "codex-review.md").write_text(REVIEW_TEMPLATE)
++    (cycle_dir / "codex-followup.md").write_text(FOLLOWUP_TEMPLATE)
++    (cycle_dir / "final-summary.md").write_text(FINAL_SUMMARY_TEMPLATE)
++    (cycle_dir / "self-application-notes.md").write_text(
++        "# Self-Application Notes\n\n"
++        "## Change Type\n\n"
++        "<!-- user-facing feature / internal tooling / documentation -->\n\n"
++        "## Impact on Framework Development\n\n"
++        "<!-- How does this improve the framework's own dev workflow? -->\n"
+     )
+-    for name in [
+-        "claude-implementation-summary.md",
+-        "codex-review.md",
+-        "codex-followup.md",
+-        "final-summary.md",
+-        "self-application-notes.md",
+-    ]:
+-        (cycle_dir / name).write_text(f"# {name.replace('.md','').replace('-',' ').title()}\n\n<!-- To be filled -->\n")
+ 
+     if cfg.store_git_status:
+         status = _run_git(["status"], cfg.project_root)
+@@ -84,16 +214,27 @@ def start_cycle(cfg: Config, version: str, title: str) -> Path:
+     return cycle_dir
+ 
+ 
+-def finalize_cycle(cfg: Config, cycle_dir: Path) -> None:
+-    """Mark a cycle as completed, update index and version history."""
+-    meta_path = cycle_dir / "meta.json"
+-    if not meta_path.exists():
+-        raise FileNotFoundError(f"No meta.json in {cycle_dir}")
++def finalize_cycle(cfg: Config, cycle_dir: Path) -> list[str]:
++    """Mark a cycle as completed, update index and version history.
+ 
+-    meta = json.loads(meta_path.read_text())
+-    meta["status"] = "completed"
++    Returns a list of warnings (empty if all looks good).
++    """
++    meta = _read_meta(cycle_dir)
++    warnings = []
++
++    # Quality checks
++    if _is_placeholder(cycle_dir / "codex-review.md"):
++        warnings.append("codex-review.md is empty or still a template")
++    if _is_placeholder(cycle_dir / "codex-followup.md"):
++        warnings.append("codex-followup.md is empty or still a template")
++    if _is_placeholder(cycle_dir / "final-summary.md"):
++        warnings.append("final-summary.md is empty or still a template")
++    if _is_placeholder(cycle_dir / "claude-implementation-summary.md"):
++        warnings.append("claude-implementation-summary.md is empty or still a template")
++
++    _update_phase(meta, "completed")
+     meta["finished_at"] = _now_iso()
+-    meta_path.write_text(json.dumps(meta, indent=2) + "\n")
++    _write_meta(cycle_dir, meta)
+ 
+     if cfg.store_git_status:
+         status = _run_git(["status"], cfg.project_root)
+@@ -107,6 +248,8 @@ def finalize_cycle(cfg: Config, cycle_dir: Path) -> None:
+     _append_index(cfg, meta)
+     _append_version_history(cfg, meta, cycle_dir)
+ 
++    return warnings
++
+ 
+ def _append_index(cfg: Config, meta: dict) -> None:
+     index_path = cfg.cycle_root_path / "index.jsonl"
+@@ -123,7 +266,7 @@ def _append_version_history(cfg: Config, meta: dict, cycle_dir: Path) -> None:
+     if final_summary.exists():
+         content = final_summary.read_text().strip()
+         lines = content.split("\n")
+-        summary_text = "\n".join(l for l in lines if not l.startswith("# "))
++        summary_text = "\n".join(l for l in lines if not l.strip().startswith("#") and not l.strip().startswith("<!--"))
+ 
+     entry = (
+         f"\n### {meta['version']} — {meta['title']}\n\n"
+@@ -164,3 +307,12 @@ def find_latest_cycle(cfg: Config) -> Path | None:
+         reverse=True,
+     )
+     return dirs[0] if dirs else None
++
++
++def get_cycle_phase(cycle_dir: Path) -> str:
++    """Get the current phase of a cycle, with backward compat."""
++    meta = _read_meta(cycle_dir)
++    if "phase" in meta:
++        return meta["phase"]
++    # Backward compat: infer from status
++    return meta.get("status", "started")
+diff --git a/docs/operational-playbook.md b/docs/operational-playbook.md
+index 8023b5a..33302bb 100644
+--- a/docs/operational-playbook.md
++++ b/docs/operational-playbook.md
+@@ -1,94 +1,137 @@
+ # Operational Playbook
+ 
+-Day-to-day rules for running development cycles on this project.
++Day-to-day rules for running development cycles.
+ 
+ ## When to Create a Cycle
+ 
+ **Always create a cycle for:**
+-- New features or commands
++- New features or CLI commands
+ - Bug fixes that touch multiple files
+ - Architectural changes
+ - Documentation overhauls
++- Any change where Codex review would be valuable
+ 
+ **Skip the cycle for:**
+-- Typo fixes in docs (single file, obvious change)
++- Typo fixes in docs (single file, obvious)
+ - Dependency version bumps with no code changes
+ - `.gitignore` or editor config changes
+ 
+ ## Cycle Granularity
+ 
+-One cycle = one coherent unit of work. Guidelines:
++One cycle = one coherent unit of work.
+ 
+ - If you can describe the change in a single sentence, it's one cycle.
+-- If the work spans multiple unrelated areas, split into separate cycles.
+-- If unsure, start one cycle and split later if it grows too large.
++- If the work spans unrelated areas, split into separate cycles.
++- If unsure, start one cycle and split later if it grows.
+ 
+ ## Version Numbering
+ 
+-Follow semver for version labels:
++Follow semver:
+ 
+-- `v0.x.y` — pre-1.0 development (current phase)
++- `v0.x.y` — pre-1.0 development
+ - Bump patch (`y`) for fixes and small additions
+ - Bump minor (`x`) for new features or commands
+ - Bump major only at significant milestones
+ 
+-Multiple cycles can share the same version. The version label groups related work.
++Multiple cycles can share the same version.
+ 
+-## Light Changes
++## Light Changes (No Review)
+ 
+-For small, well-scoped changes:
++For small, well-scoped changes where review adds little value:
+ 
+-1. `start-cycle` with a descriptive title
+-2. Implement
+-3. Write a brief `claude-implementation-summary.md`
+-4. Skip Codex review (optional for small changes)
+-5. `finalize-cycle`
++```
++start-cycle → implement → update summary → finalize-cycle
++```
+ 
+-## Large Changes
++The `finalize-cycle` warning about empty `codex-review.md` is informational.
++It's OK to finalize without review for light changes.
+ 
+-For significant features or refactors:
++## Standard Changes (With Review)
+ 
+-1. `start-cycle`
+-2. Fill `request.md` with full context
+-3. Implement
+-4. Write thorough `claude-implementation-summary.md`
+-5. Run Codex review — save to `codex-review.md`
+-6. Process feedback via `/devcycle-review-fix`
+-7. `finalize-cycle`
++For typical features and fixes:
+ 
+-## When to Use Adversarial Review
++```
++start-cycle → implement → prepare-review → Codex review → finalize-review → fix → finalize-cycle
++```
+ 
+-Use adversarial review (asking Codex to try to break or find flaws) when:
++This is the default flow. Use it unless the change is trivially small.
+ 
+-- The change affects core cycle logic (config loading, index management)
+-- Security-sensitive changes (if/when auth or external integrations are added)
+-- Changes to CLI argument parsing or file format handling
++## Large / Risky Changes (Adversarial Review)
+ 
+-## When to Use Rescue
++For changes that affect core logic, data formats, or security:
++
++```
++start-cycle → implement → prepare-review → adversarial Codex review → finalize-review → fix → finalize-cycle
++```
+ 
+-Use the rescue flow (delegating to Codex for a second implementation pass) when:
++Ask Codex to specifically try to break the implementation or find security issues.
++Use adversarial review when:
++- The change affects core cycle logic (config, index, meta.json format)
++- File format or CLI argument changes that affect backward compatibility
++- Security-sensitive code (if/when added)
++
++## When to Use Rescue
+ 
++Delegate to Codex rescue when:
+ - Claude's implementation has failed twice on the same issue
+ - The root cause is unclear after investigation
+ - A fundamentally different approach might be needed
+ 
++## Handling Incomplete Cycles
++
++**Started but abandoned:**
++- If a cycle won't be completed, either:
++  - Finalize it with a summary noting it was abandoned and why
++  - Delete the cycle directory (if nothing useful was produced)
++
++**Review pending but stalled:**
++- Check `show-index --live --phase review_pending` to find stalled cycles
++- Either run the review or advance past it with `mark-phase`
++
++**Multiple cycles in parallel:**
++- Each cycle has its own directory — no conflict
++- Use `--cycle-dir` to target specific cycles instead of relying on `latest-cycle`
++- Keep cycle scopes non-overlapping when possible
++
++## Phase Transitions
++
++Normal flow:
++
++```
++started → implementation_done → review_pending → review_done → followup_done → completed
++```
++
++You can skip phases with `mark-phase` for light changes:
++
++```
++started → completed   (via finalize-cycle)
++```
++
++## Finalize Quality
++
++`finalize-cycle` warns about empty files. Pay attention to:
++- `claude-implementation-summary.md` — should always be filled
++- `final-summary.md` — should always be filled
++- `codex-review.md` — can be empty for light changes
++- `codex-followup.md` — only needed if review was done
++
+ ## History Updates
+ 
+-**Mandatory** history update (via `finalize-cycle`) for:
+-- All completed cycles
+-- Version milestone announcements
++`finalize-cycle` automatically appends to:
++- `ops/dev-cycles/index.jsonl` — machine-readable log
++- `docs/version-history.md` — human-readable log
+ 
+-**Optional** manual history entries for:
+-- Project status summaries
+-- Migration notes
++Manual history append (if needed):
++```bash
++python3 -m dev_cycle.cli append-history --cycle-dir <DIR>
++```
+ 
+-## Review Checklist
++## Commit Conventions
+ 
+-Before finalizing any cycle, verify:
++When the cycle is complete:
++- Commit with `vX.Y.Z: <description>` to auto-create a tag
++- Use `git push --follow-tags` to push both commit and tag
+ 
+-- [ ] `final-summary.md` accurately describes the changes
+-- [ ] Changed files are listed
+-- [ ] No temporary or debug code left behind
+-- [ ] Tests pass (when applicable)
+-- [ ] Documentation updated if behavior changed
+-- [ ] `self-application-notes.md` filled in if the framework itself was modified
++For intermediate commits during a cycle:
++- Use descriptive messages without the version prefix
++- The auto-tag hook only fires on `vX.Y.Z` prefixed messages
+diff --git a/docs/self-hosting.md b/docs/self-hosting.md
+index df3a23f..180cb61 100644
+--- a/docs/self-hosting.md
++++ b/docs/self-hosting.md
+@@ -1,15 +1,15 @@
+ # Self-Hosting Guide
+ 
+-This project uses its own dev cycle framework to manage development. This document
+-explains how to run the framework on itself.
++This project uses its own dev cycle framework to manage its development. This
++document explains how to run the framework on itself.
+ 
+ ## Initial Setup
+ 
+-The repository ships with everything needed for self-application:
++The repository ships with everything needed:
+ 
+-- `devcycle.config.json` — project-specific configuration
+-- `.claude/commands/` — Claude Code slash commands for the cycle workflow
+-- `ops/dev-cycles/` — directory where cycle logs are stored
++- `devcycle.config.json` — project configuration
++- `.claude/commands/` — Claude Code slash commands
++- `ops/dev-cycles/` — cycle log storage
+ - `docs/version-history.md` — cumulative version history
+ 
+ After cloning, enable the auto-tag hook:
+@@ -18,13 +18,8 @@ After cloning, enable the auto-tag hook:
+ python3 -m dev_cycle.cli setup-hooks   # or: make setup
+ ```
+ 
+-This configures git to run `scripts/hooks/post-commit`, which auto-creates tags
+-when commit messages start with `vX.Y.Z`.
+-
+ ## Configuration
+ 
+-The self-application config lives at the repo root:
+-
+ ```json
+ {
+   "project_name": "ai-dev-cycle-framework",
+@@ -37,96 +32,123 @@ The self-application config lives at the repo root:
+ }
+ ```
+ 
+-## Starting a Cycle
++## Running a Full Cycle
++
++### Step 1 — Start
+ 
+ ```bash
+-python3 -m dev_cycle.cli start-cycle --version v0.1.0 --title "your cycle title"
++python3 -m dev_cycle.cli start-cycle --version v0.2.0 --title "improve review flow"
+ ```
+ 
+-Or use the Claude Code command: `/devcycle-start v0.1.0 "your cycle title"`
++Or use `/devcycle-start v0.2.0 "improve review flow"` in Claude Code.
+ 
+-This creates a new directory under `ops/dev-cycles/` with initial template files.
++This creates a cycle directory with templates and prints next steps.
+ 
+-## During Implementation
++### Step 2 — Fill request.md
+ 
+-1. Edit `request.md` in the cycle directory to describe the goal.
+-2. Implement the changes.
+-3. Update `claude-implementation-summary.md` with what was done.
++Edit `request.md` in the cycle directory:
++- **Goal**: What this cycle should accomplish
++- **Context**: Why it's needed
++- **Scope**: What's in and out of scope
+ 
+-## Codex Review
++### Step 3 — Implement
+ 
+-After implementation, run Codex review on the changes. Save findings to
+-`codex-review.md` in the cycle directory.
++Make the code changes. This is the main work phase.
+ 
+-Then use `/devcycle-review-fix` to process the feedback:
+-- Accept valid items and implement fixes
+-- Defer out-of-scope items
+-- Reject inapplicable items
+-- Record decisions in `codex-followup.md`
++### Step 4 — Update implementation summary
++
++Fill in `claude-implementation-summary.md`:
++- What was done (not what was requested)
++- Key decisions and trade-offs
++- Changed files
++- How it was tested
+ 
+-## Finalizing a Cycle
++### Step 5 — Prepare for review
+ 
+ ```bash
+-python3 -m dev_cycle.cli finalize-cycle --cycle-dir ops/dev-cycles/<cycle_id>
++python3 -m dev_cycle.cli prepare-review
+ ```
+ 
+-Or use `/devcycle-finalize`.
++This sets the phase to `review_pending` and shows what to do next.
+ 
+-This will:
+-- Set the cycle status to `completed`
+-- Capture git status and diff
+-- Append to `ops/dev-cycles/index.jsonl`
+-- Append to `docs/version-history.md`
++### Step 6 — Run Codex review (human step)
+ 
+-## Viewing History
++This is where a human triggers Codex review. Suggest this prompt:
+ 
+-List all completed cycles:
++> Review the changes in this cycle. Focus on correctness, edge cases, and
++> maintainability. Structure findings as High/Medium/Low severity.
++
++Paste the results into `codex-review.md` in the cycle directory.
++
++### Step 7 — Finalize review
+ 
+ ```bash
+-python3 -m dev_cycle.cli show-index
++python3 -m dev_cycle.cli finalize-review
+ ```
+ 
+-Filter by version:
++### Step 8 — Address findings
++
++For each review finding:
++- **Accept** and fix, **Defer** with reason, or **Reject** with explanation
++- Record decisions in `codex-followup.md`
++
++### Step 9 — Finalize
++
++Write `final-summary.md`, then:
+ 
+ ```bash
+-python3 -m dev_cycle.cli show-index --version v0.1.0
++python3 -m dev_cycle.cli finalize-cycle
+ ```
+ 
+-Show as a readable table:
++The CLI will warn about any empty files and update `index.jsonl` + `version-history.md`.
++
++## Where Humans Are Involved
++
++| Step | Who | What |
++|------|-----|------|
++| Start | Claude or human | Decide what to work on |
++| Implement | Claude | Write code |
++| Codex review | Human | Trigger review, paste results |
++| Accept/defer/reject | Claude or human | Evaluate findings |
++| Finalize | Claude | Wrap up and record |
++
++The framework intentionally does not auto-trigger Codex review. This gives the
++human control over when and how review happens.
++
++## Viewing History
+ 
+ ```bash
++# All finalized cycles
+ python3 -m dev_cycle.cli show-index --format markdown
+-```
+ 
+-Find the most recent cycle:
++# Live scan (includes in-progress cycles)
++python3 -m dev_cycle.cli show-index --live --format markdown
+ 
+-```bash
+-python3 -m dev_cycle.cli latest-cycle
++# Filter by version
++python3 -m dev_cycle.cli show-index --live --version v0.2.0
++
++# Latest cycle details
++python3 -m dev_cycle.cli latest-cycle -v
+ ```
+ 
+ ## Cycle Artifacts
+ 
+-Each cycle directory contains:
+-
+ | File | Purpose |
+ |------|---------|
+-| `meta.json` | Cycle metadata (id, version, status, timestamps) |
+-| `request.md` | What was requested for this cycle |
+-| `claude-implementation-summary.md` | What Claude implemented |
+-| `codex-review.md` | Codex review findings |
+-| `codex-followup.md` | How review feedback was addressed |
+-| `final-summary.md` | Final summary with changes and remaining items |
+-| `self-application-notes.md` | Notes on how this cycle affects the framework itself |
+-| `git-status.txt` | Git status snapshot |
+-| `git.diff` | Git diff snapshot |
++| `meta.json` | Cycle metadata (id, version, phase, timestamps) |
++| `request.md` | What was requested (goal, context, scope) |
++| `claude-implementation-summary.md` | What was implemented (decisions, files, testing) |
++| `codex-review.md` | Review findings (High/Medium/Low severity) |
++| `codex-followup.md` | How findings were addressed (Accepted/Deferred/Rejected) |
++| `final-summary.md` | Final summary (overview, changes, remaining issues) |
++| `self-application-notes.md` | Impact on the framework's own workflow |
++| `git-status.txt` | Git status at start and finalize |
++| `git.diff` | Git diff at start and finalize |
+ 
+ ## Self-Application Notes
+ 
+-When a cycle modifies the framework itself, fill in `self-application-notes.md` to
+-record whether the change is:
+-- A user-facing feature improvement
+-- An internal tooling/workflow improvement
+-- A documentation or example update
++When modifying the framework itself, fill in `self-application-notes.md`:
++- **Change Type**: user-facing feature, internal tooling, or documentation
++- **Impact**: How this improves the framework's own development workflow
+ 
+-This helps distinguish framework features from meta-improvements when reviewing
+-history.
++This distinguishes framework features from meta-improvements.

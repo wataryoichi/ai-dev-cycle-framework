@@ -1,38 +1,49 @@
-Review and address Codex review feedback for the current cycle.
-
-## Instructions
-
-1. Find the current cycle directory. If not provided as an argument, use:
-
-```bash
-python3 -m dev_cycle.cli latest-cycle
-```
+Process Codex review feedback: judge → fix → record → decide re-review.
 
 Arguments (optional cycle dir): $ARGUMENTS
 
-2. Read `codex-review.md` in the cycle directory.
+## Step 1 — Status
 
-3. For each review item, decide:
-   - **Accept**: The feedback is valid — implement the fix
-   - **Defer**: Valid but out of scope for this cycle — note for follow-up
-   - **Reject**: The feedback is incorrect or not applicable — explain why
-
-4. Implement all accepted fixes.
-
-5. Update `codex-followup.md` with:
-
-```markdown
-## Accepted
-- [item]: [what was changed]
-
-## Deferred
-- [item]: [reason for deferral]
-
-## Rejected
-- [item]: [reason for rejection]
+```bash
+devcycle next
 ```
 
-6. Update `claude-implementation-summary.md` if the fixes changed the implementation
-   significantly.
+## Step 2 — Generate followup draft
 
-7. Report what was changed and what remains.
+```bash
+devcycle followup
+```
+
+## Step 3 — Judge each finding
+
+Edit `codex-followup.md`:
+
+- **Accept**: `- [HIGH] Finding: added validation in foo.py:L45`
+- **Defer**: `- [MEDIUM] Finding: needs separate cycle`
+- **Reject**: `- [LOW] Finding: already handled by X`
+
+## Step 4 — Implement fixes
+
+## Step 5 — Update records
+
+- `claude-implementation-summary.md` if implementation changed
+- `final-summary.md`: Overview, Changes, Verification, Remaining Issues
+
+## Step 6 — Re-review?
+
+```bash
+devcycle next
+```
+
+| Hint | Action |
+|------|--------|
+| `recommended` | `devcycle prepare` |
+| `optional` | Your judgment |
+| `not_needed` | `devcycle finalize` |
+
+## Step 7 — Finalize
+
+```bash
+devcycle check
+devcycle finalize --strict
+```

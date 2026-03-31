@@ -1,48 +1,73 @@
 Run a full development cycle from start to finish.
 
-This command guides through the complete cycle. Not all steps are fully automated —
-some require human or external input (e.g., Codex review).
+Arguments (version, title, and goal): $ARGUMENTS
 
-## Arguments
+---
 
-$ARGUMENTS
+## Phase 1 — Start
 
-## Standard Flow
-
-### Step 1 — Start Cycle
-Run `/devcycle-start` with the version and title for this cycle.
-
-### Step 2 — Fill request.md
-Document the goal, context, and constraints in the cycle's `request.md`.
-
-### Step 3 — Implement
-Carry out the implementation work described in the request.
-
-### Step 4 — Update claude-implementation-summary.md
-Write a summary of what was implemented, key decisions, and any trade-offs.
-
-### Step 5 — Codex Review
-Pause and instruct the user to run Codex review. Suggest:
-
-```
-Review the changes in this cycle. Focus on correctness, edge cases, and maintainability.
-Write your findings to <cycle_dir>/codex-review.md.
+```bash
+devcycle start --version <VERSION> --title "<TITLE>"
 ```
 
-### Step 6 — Address Review Feedback
-Run `/devcycle-review-fix` to process the Codex review results.
+Fill in `request.md`: Goal, Context, Scope, Notes.
 
-### Step 7 — Finalize
-Run `/devcycle-finalize` to complete the cycle, update the index, and append
-to version history.
+## Phase 2 — Implement
 
-### Step 8 — Verify
-Confirm all cycle artifacts are in place:
-- meta.json (status: completed)
-- request.md
-- claude-implementation-summary.md
-- codex-review.md
-- codex-followup.md
-- final-summary.md
-- index.jsonl updated
-- version-history.md updated
+Make the code changes. Update `claude-implementation-summary.md`.
+
+## Phase 3 — Prepare
+
+```bash
+devcycle prepare
+```
+
+Prints a copy-paste Codex prompt and import options.
+
+## Phase 4 — Codex Review (HUMAN)
+
+Run Codex review. Save output to `codex-output.txt`.
+
+## Phase 5 — Import Review
+
+```bash
+cat codex-output.txt | devcycle review-loop --generate-followup
+```
+
+## Phase 6 — Address Findings
+
+Edit `codex-followup.md`: accept/defer/reject each finding. Implement fixes.
+
+## Phase 7 — Re-review?
+
+```bash
+devcycle next
+```
+
+| Hint | Action |
+|------|--------|
+| `recommended` | `devcycle prepare` → back to Phase 3 |
+| `optional` | Your judgment |
+| `not_needed` | Proceed to finalize |
+
+## Phase 8 — Check + Finalize
+
+```bash
+devcycle check
+devcycle finalize --strict
+```
+
+---
+
+| # | Phase | Command | Who |
+|---|-------|---------|-----|
+| 1 | Start | `devcycle start` | Claude |
+| 2 | Implement | (code + summary) | Claude |
+| 3 | Prepare | `devcycle prepare` | CLI |
+| 4 | Review | Run Codex | HUMAN |
+| 5 | Import | `devcycle review-loop` | CLI |
+| 6 | Follow-up | `devcycle followup` + fix | Claude |
+| 7 | Re-review? | `devcycle next` | CLI |
+| 8 | Finalize | `devcycle check` + `devcycle finalize` | CLI |
+
+**Lost?** `devcycle next`

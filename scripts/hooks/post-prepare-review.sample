@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+#
+# Hook: auto-trigger Codex review after prepare-review.
+#
+# Install:
+#   cp scripts/hooks/post-prepare-review.sample scripts/hooks/post-prepare-review
+#   chmod +x scripts/hooks/post-prepare-review
+#
+# Configure (pick one):
+#   export DEVCYCLE_CODEX_CMD="codex review --prompt"    # env var (recommended)
+#   # or edit CODEX_CMD below                            # hardcoded
+#
+# Modes:
+#   CODEX_CMD set     → automatic: runs Codex, pipes to run-review-loop
+#   CODEX_CMD empty   → dry-run: prints what would happen
+#
+# The command must accept a prompt string as its last argument and write
+# review output to stdout.
+
+set -euo pipefail
+
+# ── Configuration ─────────────────────────────────────────
+# Priority: $DEVCYCLE_CODEX_CMD env var > hardcoded CODEX_CMD below
+CODEX_CMD="${DEVCYCLE_CODEX_CMD:-}"
+
+# Uncomment and set to hardcode instead of using env var:
+# CODEX_CMD="codex review --prompt"
+# ──────────────────────────────────────────────────────────
+
+# Get cycle info
+INFO=$(python3 -m dev_cycle.cli review-handoff --json 2>/dev/null) || {
+    echo "[review-hook] No active cycle. Skipping." >&2
+    exit 0
+}
+
+TITLE=$(echo "$INFO" | python3 -c "import sys,json; print(json.load(sys.stdin)['title'])")
+PROMPT=$(echo "$INFO" | python3 -c "import sys,json; print(json.load(sys.stdin)['prompt'])")
+PHASE=$(echo "$INFO" | python3 -c "import sys,json; print(json.load(sys.stdin)['phase'])")
+
+if [ "$PHASE" != "review_pending" ]; then
+    echo "[review-hook] Phase is '$PHASE', not review_pending. Skipping." >&2
+    exit 0
+fi
+
+if [ -z "$CODEX_CMD" ]; then
+    echo "[review-hook] Dry-run for: $TITLE"
+    echo ""
+    echo "  To enable: export DEVCYCLE_CODEX_CMD='codex review --prompt'"
+    echo "  Then this will run automatically:"
+    echo "    \$DEVCYCLE_CODEX_CMD \"<prompt>\" | python3 -m dev_cycle.cli run-review-loop --generate-followup"
+    echo ""
+    echo "  Manual:"
+    echo "    cat codex-output.txt | python3 -m dev_cycle.cli run-review-loop --generate-followup"
+    exit 0
+fi
+
+echo "[review-hook] Running review for: $TITLE"
+$CODEX_CMD "$PROMPT" | python3 -m dev_cycle.cli run-review-loop --generate-followup --json
+echo "[review-hook] Done."

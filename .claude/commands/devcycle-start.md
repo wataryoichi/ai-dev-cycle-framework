@@ -1,25 +1,27 @@
-Start a new development cycle for this project.
+Start a new development cycle.
 
-## Instructions
+Arguments (version and title): $ARGUMENTS
 
-1. Run the start-cycle CLI to create a new cycle directory:
+## Steps
+
+1. **Start**:
 
 ```bash
-python3 -m dev_cycle.cli start-cycle --version <VERSION> --title "<TITLE>"
+devcycle start --version <VERSION> --title "<TITLE>"
 ```
 
-Ask the user for the version and title if not provided as arguments: $ARGUMENTS
+2. **Fill request.md**: Goal, Context, Scope, Notes.
 
-2. Confirm the created cycle directory exists and list its contents.
+3. **Investigate** before implementing: read relevant code, identify changes needed.
 
-3. Open `request.md` in the new cycle directory and fill it in:
-   - Describe the goal of this cycle
-   - Note any constraints, dependencies, or context
-   - Reference related issues or prior cycles if applicable
+4. **Implement** the changes.
 
-4. Before starting implementation, do a brief investigation:
-   - Read relevant existing code
-   - Check for related issues or TODOs
-   - Note anything that might affect the approach
+5. **Update claude-implementation-summary.md**: what was done, decisions, changed files, testing.
 
-5. Report the cycle directory path and confirm readiness to begin implementation.
+6. **Move to review**:
+
+```bash
+devcycle prepare
+```
+
+**Tip**: `devcycle next` shows the next command at any point.
