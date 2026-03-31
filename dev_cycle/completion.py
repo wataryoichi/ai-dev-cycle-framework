@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 SUBCOMMANDS = [
+    "turbo", "rollback", "history",
     "run", "resume", "status",
     "start", "prepare", "review-loop", "followup", "next", "check", "finalize",
     "handoff", "import-review", "finalize-review",
