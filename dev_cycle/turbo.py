@@ -57,8 +57,14 @@ def turbo_push(root: Path) -> bool:
     return True
 
 
-def turbo_rollback(root: Path, target: str | None = None, steps: int = 1) -> dict:
-    result = {"rolled_back": False, "from_sha": "", "to_sha": "", "to_tag": ""}
+def turbo_rollback(root: Path, target: str | None = None, steps: int = 1,
+                   reason: str = "") -> dict:
+    """Rollback and record the action."""
+    result = {
+        "rolled_back": False, "from_sha": "", "to_sha": "", "to_tag": "",
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "reason": reason,
+    }
     result["from_sha"] = _run_git(["rev-parse", "--short", "HEAD"], root)
     if target:
         out = _run_git(["rev-parse", "--verify", target], root)
@@ -70,7 +76,38 @@ def turbo_rollback(root: Path, target: str | None = None, steps: int = 1) -> dic
         _run_git(["reset", "--hard", f"HEAD~{steps}"], root)
     result["to_sha"] = _run_git(["rev-parse", "--short", "HEAD"], root)
     result["rolled_back"] = result["from_sha"] != result["to_sha"]
+
+    # Record rollback
+    if result["rolled_back"]:
+        _record_rollback(root, result)
+
     return result
+
+
+def _record_rollback(root: Path, info: dict) -> None:
+    """Save rollback record as Markdown + JSON."""
+    rollback_dir = root / "ops" / "rollbacks"
+    rollback_dir.mkdir(parents=True, exist_ok=True)
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    base = f"rollback-{ts}"
+
+    # JSON
+    (rollback_dir / f"{base}.json").write_text(json.dumps(info, indent=2) + "\n")
+
+    # Markdown
+    md = (
+        f"# Rollback — {ts}\n\n"
+        f"- **From:** `{info['from_sha']}`\n"
+        f"- **To:** `{info['to_sha']}`\n"
+    )
+    if info.get("to_tag"):
+        md += f"- **Tag:** `{info['to_tag']}`\n"
+    if info.get("reason"):
+        md += f"- **Reason:** {info['reason']}\n"
+    md += f"- **Time:** {info['timestamp']}\n"
+
+    (rollback_dir / f"{base}.md").write_text(md)
 
 
 def turbo_history(root: Path, limit: int = 20) -> list[dict]:

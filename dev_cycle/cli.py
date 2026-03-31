@@ -611,7 +611,8 @@ def cmd_rollback(args: argparse.Namespace) -> None:
     from .turbo import turbo_rollback
     root = Path(args.project_root).resolve()
     result = turbo_rollback(root, target=getattr(args, "to", None),
-                            steps=getattr(args, "steps", 1))
+                            steps=getattr(args, "steps", 1),
+                            reason=getattr(args, "reason", ""))
     if getattr(args, "json", False):
         print(json.dumps(result, indent=2))
         return
@@ -839,6 +840,7 @@ def main() -> None:
              help="Revert to a previous version (git reset --hard)")
     p.add_argument("--to", default=None, help="Tag or SHA to roll back to")
     p.add_argument("--steps", type=int, default=1, help="Commits to go back (default: 1)")
+    p.add_argument("--reason", default="", help="Why rolling back")
     _json_arg(p)
     p.set_defaults(func=cmd_rollback)
 
