@@ -27,12 +27,16 @@ What happens:
 ### AI Runner Setup
 
 ```bash
-# Optional — turbo works without these (blocks at AI steps)
-export DEVCYCLE_CLAUDE_CMD="claude --print"
-export DEVCYCLE_CODEX_CMD="codex review --prompt"
+# Optional — turbo works without these (prompts for manual input)
+export DEVCYCLE_CLAUDE_CMD="claude --print"     # auto-implementation
+export DEVCYCLE_CODEX_CMD="codex review --prompt"  # auto-review
 ```
 
-Without these, turbo pauses at implementing/review and asks for manual input.
+When configured:
+- **implementing** state → Claude runner auto-executes, writes summary, advances to review
+- **review_pending** state → Codex runner auto-executes, imports findings, generates followup
+
+Without these, turbo pauses and asks for input at each AI step.
 
 ### Options
 
@@ -103,12 +107,20 @@ All commands support `--json`.
 
 ## Dual Output
 
-Each cycle produces Markdown (human) + JSON (machine):
+Every cycle produces both Markdown and JSON from creation:
 
 ```
 ops/dev-cycles/<cycle_id>/
-  meta.json / request.json / review.json / followup.json / final_summary.json
-  request.md / codex-review.md / codex-followup.md / final-summary.md
+  meta.json              # cycle metadata
+  cycle_state.json       # current state + timestamps
+  request.json           # structured request data
+  request.md             # human-readable request
+  review.json            # review findings (after import)
+  followup.json          # accept/defer/reject decisions
+  final_summary.json     # cycle summary
+  codex-review.md        # review markdown
+  codex-followup.md      # followup markdown
+  final-summary.md       # summary markdown
   claude-implementation-summary.md
 ```
 
