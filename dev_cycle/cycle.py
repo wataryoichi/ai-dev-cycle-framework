@@ -239,7 +239,7 @@ def _resolve_cycle_dir(cfg: Config, cycle_dir_arg: str | None) -> Path:
     return latest
 
 
-def start_cycle(cfg: Config, version: str, title: str) -> Path:
+def start_cycle(cfg: Config, version: str, title: str, spec: dict | None = None) -> Path:
     """Create a new cycle directory with initial files."""
     cid = _cycle_id(version, title)
     cycle_dir = cfg.cycle_root_path / cid
@@ -255,17 +255,39 @@ def start_cycle(cfg: Config, version: str, title: str) -> Path:
         "finished_at": None,
         "project": cfg.project_name,
     }
+    if spec and spec.get("present"):
+        meta["spec_path"] = spec.get("path", "")
+        meta["spec_digest"] = spec.get("digest", "")
     _write_meta(cycle_dir, meta)
 
     # Dual output: Markdown + JSON for request
     from .dual_output import write_request
-    write_request(cycle_dir, title, version)
+    goal = ""
+    if spec and spec.get("present"):
+        goal = spec.get("summary", "")[:200]
+    write_request(cycle_dir, title, version, goal=goal,
+                  context=f"Spec: {spec['path']}" if spec and spec.get("present") else "")
+
+    # Spec fields in request.json
+    if spec:
+        req_json_path = cycle_dir / "request.json"
+        if req_json_path.exists():
+            req_data = json.loads(req_json_path.read_text())
+            req_data["spec_path"] = spec.get("path", "")
+            req_data["spec_present"] = spec.get("present", False)
+            req_data["spec_digest"] = spec.get("digest", "")
+            req_data["spec_summary"] = spec.get("summary", "")
+            req_json_path.write_text(json.dumps(req_data, indent=2) + "\n")
 
     # Cycle state JSON
-    (cycle_dir / "cycle_state.json").write_text(json.dumps({
+    state_data = {
         "cycle_id": cid, "state": "started", "version": version,
         "title": title, "started_at": meta["started_at"],
-    }, indent=2) + "\n")
+    }
+    if spec and spec.get("present"):
+        state_data["spec_path"] = spec.get("path", "")
+        state_data["spec_digest"] = spec.get("digest", "")
+    (cycle_dir / "cycle_state.json").write_text(json.dumps(state_data, indent=2) + "\n")
 
     # Markdown templates (backward compat)
     (cycle_dir / "claude-implementation-summary.md").write_text(IMPLEMENTATION_SUMMARY_TEMPLATE)

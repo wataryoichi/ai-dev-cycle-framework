@@ -23,7 +23,7 @@ def get_codex_cmd() -> str:
     return os.environ.get("DEVCYCLE_CODEX_CMD", "")
 
 
-def run_claude(cycle_dir: Path, title: str, goal: str = "") -> dict:
+def run_claude(cycle_dir: Path, title: str, goal: str = "", spec: dict | None = None) -> dict:
     """Run Claude implementation. Returns result dict.
 
     If DEVCYCLE_CLAUDE_CMD is not set, returns blocked result.
@@ -38,7 +38,7 @@ def run_claude(cycle_dir: Path, title: str, goal: str = "") -> dict:
             "output": "",
         }
 
-    prompt = _build_impl_prompt(cycle_dir, title, goal)
+    prompt = _build_impl_prompt(cycle_dir, title, goal, spec)
 
     try:
         result = subprocess.run(
@@ -58,7 +58,7 @@ def run_claude(cycle_dir: Path, title: str, goal: str = "") -> dict:
         return {"success": False, "blocked": False, "reason": str(e), "output": ""}
 
 
-def run_codex(cycle_dir: Path, title: str) -> dict:
+def run_codex(cycle_dir: Path, title: str, spec: dict | None = None) -> dict:
     """Run Codex review. Returns result dict with review text.
 
     If DEVCYCLE_CODEX_CMD is not set, returns blocked result.
@@ -73,7 +73,7 @@ def run_codex(cycle_dir: Path, title: str) -> dict:
             "review_text": "",
         }
 
-    prompt = _build_review_prompt(title)
+    prompt = _build_review_prompt(title, spec)
 
     try:
         result = subprocess.run(
@@ -93,28 +93,42 @@ def run_codex(cycle_dir: Path, title: str) -> dict:
         return {"success": False, "blocked": False, "reason": str(e), "review_text": ""}
 
 
-def _build_impl_prompt(cycle_dir: Path, title: str, goal: str) -> str:
+def _build_impl_prompt(cycle_dir: Path, title: str, goal: str,
+                       spec: dict | None = None) -> str:
     """Build a structured prompt for Claude implementation."""
     request_path = cycle_dir / "request.md"
     request_content = request_path.read_text() if request_path.exists() else ""
 
-    return (
-        f"Implement the following:\n\n"
-        f"Title: {title}\n"
-        f"Goal: {goal or title}\n\n"
-        f"Request:\n{request_content}\n\n"
-        f"After implementation, update claude-implementation-summary.md with:\n"
-        f"- What was done\n"
-        f"- Key decisions\n"
-        f"- Changed files\n"
-        f"- How to verify\n"
-    )
+    parts = [
+        f"Implement the following:\n",
+        f"Title: {title}",
+        f"Goal: {goal or title}",
+    ]
+
+    if spec and spec.get("present"):
+        parts.append(f"\nSpec ({spec.get('path', 'docs/spec.md')}):")
+        parts.append(spec.get("summary", "")[:1000])
+        if spec.get("body"):
+            parts.append(f"\nFull spec:\n{spec['body'][:3000]}")
+
+    parts.extend([
+        f"\nRequest:\n{request_content}",
+        "\nAfter implementation, update claude-implementation-summary.md with:",
+        "- What was done",
+        "- Key decisions",
+        "- Changed files",
+        "- How to verify",
+    ])
+    return "\n".join(parts)
 
 
-def _build_review_prompt(title: str) -> str:
+def _build_review_prompt(title: str, spec: dict | None = None) -> str:
     """Build a structured prompt for Codex review."""
-    return (
+    base = (
         f"Review the changes for: {title}. "
         f"Focus on correctness, edge cases, and maintainability. "
         f"Structure findings as High / Medium / Low severity."
     )
+    if spec and spec.get("present") and spec.get("summary"):
+        base += f" The spec goal: {spec['summary'][:300]}"
+    return base

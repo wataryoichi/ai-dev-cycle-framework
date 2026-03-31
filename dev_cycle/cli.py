@@ -597,9 +597,10 @@ def cmd_turbo(args: argparse.Namespace) -> None:
     dry = getattr(args, "dry_run", False)
     is_json = getattr(args, "json", False)
 
+    spec_arg = getattr(args, "spec", None)
     output = (lambda m: print(m, file=sys.stderr)) if is_json else (lambda m: print(m))
     result = run_turbo(cfg, args.title, push=push, non_interactive=ni,
-                       dry_run=dry, output_fn=output)
+                       dry_run=dry, spec_path=spec_arg, output_fn=output)
 
     if is_json:
         print(json.dumps(result, indent=2))
@@ -829,6 +830,7 @@ def main() -> None:
     p = _add(sub, ["turbo", "auto"],
              help="Full cycle + auto commit/tag/push (Claude→Codex→Claude)")
     p.add_argument("--title", "-t", required=True, help="What this cycle does")
+    p.add_argument("--spec", default=None, help="Path to spec file (default: docs/spec.md)")
     p.add_argument("--no-push", action="store_true", help="Commit and tag but skip push")
     p.add_argument("--non-interactive", "-n", action="store_true",
                     help="Auto-advance where safe, block where input needed")

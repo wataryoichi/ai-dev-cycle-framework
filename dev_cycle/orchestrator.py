@@ -187,7 +187,15 @@ def _drive(
         if state == State.IMPLEMENTING:
             from .ai_runner import run_claude
             meta = _read_meta(cycle_dir)
-            claude_result = run_claude(cycle_dir, meta.get("title", ""))
+            # Load spec if available
+            spec = None
+            if meta.get("spec_path"):
+                from .spec_reader import read_spec
+                from pathlib import Path as _P
+                sp = _P(meta["spec_path"])
+                if sp.exists():
+                    spec = read_spec(sp)
+            claude_result = run_claude(cycle_dir, meta.get("title", ""), spec=spec)
             if claude_result["success"]:
                 output(f"  → Claude implementation complete")
                 if claude_result.get("output"):
@@ -268,7 +276,14 @@ def _drive(
                 # Try auto Codex review
                 from .ai_runner import run_codex
                 meta = _read_meta(cycle_dir)
-                codex_result = run_codex(cycle_dir, meta.get("title", ""))
+                codex_spec = None
+                if meta.get("spec_path"):
+                    from .spec_reader import read_spec
+                    from pathlib import Path as _P
+                    sp = _P(meta["spec_path"])
+                    if sp.exists():
+                        codex_spec = read_spec(sp)
+                codex_result = run_codex(cycle_dir, meta.get("title", ""), spec=codex_spec)
                 if codex_result["success"] and codex_result["review_text"]:
                     output(f"  → Codex review auto-imported")
                     import_review(cycle_dir, codex_result["review_text"])

@@ -132,6 +132,7 @@ def run_turbo(
     push: bool = True,
     non_interactive: bool = False,
     dry_run: bool = False,
+    spec_path: str | None = None,
     input_fn=None,
     output_fn=None,
 ) -> dict:
@@ -145,8 +146,15 @@ def run_turbo(
     root = cfg.project_root
     tag = f"devcycle/{version}"
 
+    # Find and read spec
+    from .spec_reader import find_spec, read_spec, empty_spec
+    spec_file = find_spec(root, spec_path)
+    spec = read_spec(spec_file) if spec_file else empty_spec()
+    if spec["present"]:
+        output(f"  Spec: {spec['path']}")
+
     # Phase 1: Orchestrate the dev cycle
-    cycle_dir = start_cycle(cfg, version, title)
+    cycle_dir = start_cycle(cfg, version, title, spec=spec)
     meta = _read_meta(cycle_dir)
     output(f"Turbo: {meta['cycle_id']}")
     output(f"  Version: {version}")
