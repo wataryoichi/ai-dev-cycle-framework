@@ -198,12 +198,22 @@ def _drive(
             claude_result = run_claude(cycle_dir, meta.get("title", ""), spec=spec)
             if claude_result["success"]:
                 output(f"  → Claude implementation complete")
-                if claude_result.get("output"):
-                    # Write output to implementation summary
-                    summary_path = cycle_dir / "claude-implementation-summary.md"
-                    summary_path.write_text(
+                impl_text = claude_result.get("output", "")[:2000]
+                if impl_text:
+                    # Write dual output: Markdown + JSON
+                    (cycle_dir / "claude-implementation-summary.md").write_text(
                         f"# Claude Implementation Summary\n\n"
-                        f"## What Was Done\n\n{claude_result['output'][:2000]}\n"
+                        f"## What Was Done\n\n{impl_text}\n"
+                    )
+                    import json as _json
+                    (cycle_dir / "implementation_summary.json").write_text(
+                        _json.dumps({
+                            "title": meta.get("title", ""),
+                            "summary": impl_text,
+                            "spec_path": meta.get("spec_path", ""),
+                            "spec_digest": meta.get("spec_digest", ""),
+                            "state": "review_needed",
+                        }, indent=2) + "\n"
                     )
                 _record_transition(cycle_dir, state, State.REVIEW_NEEDED, "auto_claude")
                 result.history.append({"from": state.value, "action": "auto_claude"})
