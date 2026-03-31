@@ -242,7 +242,8 @@ def _resolve_cycle_dir(cfg: Config, cycle_dir_arg: str | None) -> Path:
     return latest
 
 
-def start_cycle(cfg: Config, version: str, title: str, spec: dict | None = None) -> Path:
+def start_cycle(cfg: Config, version: str, title: str, spec: dict | None = None,
+                lang: str = "en") -> Path:
     """Create a new cycle directory with initial files."""
     cid = _cycle_id(version, title)
     cycle_dir = cfg.cycle_root_path / cid
@@ -258,6 +259,7 @@ def start_cycle(cfg: Config, version: str, title: str, spec: dict | None = None)
         "finished_at": None,
         "project": cfg.project_name,
     }
+    meta["lang"] = lang
     if spec and spec.get("present"):
         meta["spec_path"] = spec.get("path", "")
         meta["spec_digest"] = spec.get("digest", "")
@@ -266,7 +268,7 @@ def start_cycle(cfg: Config, version: str, title: str, spec: dict | None = None)
     # Dual output: Markdown + JSON for request (includes spec if present)
     from .dual_output import write_request
     goal = spec.get("summary", "")[:200] if spec and spec.get("present") else ""
-    write_request(cycle_dir, title, version, goal=goal, spec=spec)
+    write_request(cycle_dir, title, version, goal=goal, spec=spec, lang=lang)
 
     # Cycle state JSON
     state_data = {

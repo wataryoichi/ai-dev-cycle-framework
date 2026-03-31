@@ -598,9 +598,12 @@ def cmd_turbo(args: argparse.Namespace) -> None:
     is_json = getattr(args, "json", False)
 
     spec_arg = getattr(args, "spec", None)
+    lang_arg = getattr(args, "lang", None) or cfg.__dict__.get("default_language", "en")
+    cycles_arg = getattr(args, "cycles", 1)
     output = (lambda m: print(m, file=sys.stderr)) if is_json else (lambda m: print(m))
     result = run_turbo(cfg, args.title, push=push, non_interactive=ni,
-                       dry_run=dry, spec_path=spec_arg, output_fn=output)
+                       dry_run=dry, spec_path=spec_arg, lang=lang_arg,
+                       cycles=cycles_arg, output_fn=output)
 
     if is_json:
         print(json.dumps(result, indent=2))
@@ -655,8 +658,9 @@ def cmd_run(args: argparse.Namespace) -> None:
 
     ni = getattr(args, "non_interactive", False)
     spec_arg = getattr(args, "spec", None)
+    lang_arg = getattr(args, "lang", None) or "en"
     result = run_cycle(cfg, args.version, args.title, output_fn=output,
-                       non_interactive=ni, spec_path=spec_arg)
+                       non_interactive=ni, spec_path=spec_arg, lang=lang_arg)
 
     if getattr(args, "json", False):
         print(json.dumps({
@@ -833,6 +837,8 @@ def main() -> None:
              help="Full cycle + auto commit/tag/push (Claude→Codex→Claude)")
     p.add_argument("--title", "-t", required=True, help="What this cycle does")
     p.add_argument("--spec", default=None, help="Path to spec file (default: docs/spec.md)")
+    p.add_argument("--lang", default=None, choices=["en", "ja"], help="Output language (default: en)")
+    p.add_argument("--cycles", type=int, default=1, help="Number of cycles to run (default: 1)")
     p.add_argument("--no-push", action="store_true", help="Commit and tag but skip push")
     p.add_argument("--non-interactive", "-n", action="store_true",
                     help="Auto-advance where safe, block where input needed")
@@ -861,6 +867,7 @@ def main() -> None:
     p.add_argument("--version", required=True, help="Version label (e.g. v0.1.0)")
     p.add_argument("--title", required=True, help="Short cycle title")
     p.add_argument("--spec", default=None, help="Path to spec file (default: docs/spec.md)")
+    p.add_argument("--lang", default=None, choices=["en", "ja"], help="Output language (default: en)")
     p.add_argument("--non-interactive", "-n", action="store_true",
                     help="Auto-advance where safe, block where input needed")
     _json_arg(p)

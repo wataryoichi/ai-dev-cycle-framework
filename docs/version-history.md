@@ -10,6 +10,8 @@ State machine, run/resume/status, choice UI, non-interactive mode.
 Turbo orchestrator, AI runners, rollback, dual JSON, spec-driven cycles.
 
 ### v0.4.0 — Spec Contract
-Spec contract formalized. Turbo + Guided mode unified on spec.
-Structured extraction (constraints, outputs, criteria, non-goals).
-Implementation summary via dual_output. 211 tests.
+Spec contract formalized. Turbo + Guided unified on spec.
+
+### v0.5.0 — Multi-cycle + i18n
+Multi-cycle execution (`--cycles N`). Japanese/English output (`--lang ja`).
+Context carry-forward between cycles. 226 tests.

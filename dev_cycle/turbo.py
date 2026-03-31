@@ -133,70 +133,100 @@ def run_turbo(
     non_interactive: bool = False,
     dry_run: bool = False,
     spec_path: str | None = None,
+    lang: str = "en",
+    cycles: int = 1,
     input_fn=None,
     output_fn=None,
 ) -> dict:
-    """Run a turbo cycle: orchestrate → commit → tag → push.
+    """Run turbo cycle(s): orchestrate → commit → tag → push.
 
-    The orchestrator drives Claude→Codex→Claude.
-    Git operations happen only after the cycle completes or reaches a stable state.
+    Supports multi-cycle via `cycles` parameter.
     """
     output = output_fn or (lambda m: print(m))
-    version = auto_version()
     root = cfg.project_root
-    tag = f"devcycle/{version}"
 
-    # Find and read spec
     from .spec_reader import find_spec, read_spec, empty_spec
     spec_file = find_spec(root, spec_path)
     spec = read_spec(spec_file) if spec_file else empty_spec()
-    if spec["present"]:
-        output(f"  Spec: {spec['path']}")
 
-    # Phase 1: Orchestrate the dev cycle
-    cycle_dir = start_cycle(cfg, version, title, spec=spec)
-    meta = _read_meta(cycle_dir)
-    output(f"Turbo: {meta['cycle_id']}")
-    output(f"  Version: {version}")
+    all_cycles = []
+    prev_cycle_id = ""
 
-    if dry_run:
-        output(f"  [dry-run] Would orchestrate cycle, then commit as {tag}")
-        return {
+    for iteration in range(cycles):
+        import time
+        if iteration > 0:
+            time.sleep(1)  # ensure unique timestamp
+
+        version = auto_version()
+        tag = f"devcycle/{version}"
+
+        if cycles > 1:
+            output(f"\n── Cycle {iteration + 1}/{cycles} ──")
+
+        if spec["present"]:
+            output(f"  Spec: {spec['path']}")
+
+        cycle_dir = start_cycle(cfg, version, title, spec=spec, lang=lang)
+        meta = _read_meta(cycle_dir)
+
+        # Record multi-cycle context
+        if prev_cycle_id:
+            meta["previous_cycle_id"] = prev_cycle_id
+            meta["iteration_index"] = iteration
+            meta["iteration_total"] = cycles
+            _write_meta(cycle_dir, meta)
+
+        output(f"Turbo: {meta['cycle_id']}")
+        output(f"  Version: {version}")
+
+        if dry_run:
+            output(f"  [dry-run] Would orchestrate, then commit as {tag}")
+            all_cycles.append({
+                "cycle_id": meta["cycle_id"], "version": version, "state": "started",
+                "tag": tag, "dry_run": True,
+            })
+            break
+
+        orch_result = _drive(cfg, cycle_dir, input_fn, output, non_interactive)
+        state = orch_result.state
+
+        # Git afterburner
+        commit_result = {"committed": False, "tagged": False, "sha": "", "tag": ""}
+        commit_msg = f"devcycle(turbo): {title} [{version}] state:{state.value}"
+        commit_result = turbo_commit(root, commit_msg, tag=tag)
+        if commit_result["committed"]:
+            output(f"  Commit: {commit_result['sha']}")
+            output(f"  Tag:    {tag}")
+        if push and commit_result["committed"]:
+            turbo_push(root)
+            output(f"  Pushed")
+            commit_result["pushed"] = True
+
+        cycle_info = {
             "cycle_id": meta["cycle_id"], "version": version, "title": title,
-            "tag": tag, "sha": "", "committed": False, "pushed": False,
-            "state": "started", "dry_run": True, "cycle_dir": str(cycle_dir),
+            "tag": tag if commit_result["tagged"] else "",
+            "sha": commit_result.get("sha", ""),
+            "committed": commit_result["committed"],
+            "pushed": commit_result.get("pushed", False),
+            "state": state.value,
+            "interrupted": orch_result.interrupted,
+            "blocked": orch_result.blocked,
+            "blocked_reason": orch_result.blocked_reason,
+            "cycle_dir": str(cycle_dir),
         }
+        all_cycles.append(cycle_info)
+        prev_cycle_id = meta["cycle_id"]
 
-    # Run the orchestrator (same engine as `devcycle run`)
-    orch_result = _drive(cfg, cycle_dir, input_fn, output, non_interactive)
+        # Stop conditions
+        if orch_result.blocked or orch_result.interrupted:
+            break
+        if state == State.COMPLETED:
+            continue  # next cycle
 
-    # Phase 2: Git operations (afterburner)
-    state = orch_result.state
-    commit_result = {"committed": False, "tagged": False, "sha": "", "tag": ""}
-
-    commit_msg = f"devcycle(turbo): {title} [{version}] state:{state.value}"
-    commit_result = turbo_commit(root, commit_msg, tag=tag)
-    if commit_result["committed"]:
-        output(f"  Commit: {commit_result['sha']}")
-        output(f"  Tag:    {tag}")
-
-    if push and commit_result["committed"]:
-        turbo_push(root)
-        output(f"  Pushed")
-        commit_result["pushed"] = True
-
-    return {
-        "cycle_id": meta["cycle_id"],
-        "version": version,
-        "title": title,
-        "tag": tag if commit_result["tagged"] else "",
-        "sha": commit_result.get("sha", ""),
-        "committed": commit_result["committed"],
-        "pushed": commit_result.get("pushed", False),
-        "state": state.value,
-        "interrupted": orch_result.interrupted,
-        "blocked": orch_result.blocked,
-        "blocked_reason": orch_result.blocked_reason,
-        "cycle_dir": str(cycle_dir),
-        "history": orch_result.history,
-    }
+    # Return last cycle result + multi-cycle summary
+    last = all_cycles[-1] if all_cycles else {}
+    last["requested_cycles"] = cycles
+    last["executed_cycles"] = len(all_cycles)
+    last["all_cycles"] = [c["cycle_id"] for c in all_cycles]
+    last["history"] = getattr(orch_result, "history", []) if 'orch_result' in dir() else []
+    return last
