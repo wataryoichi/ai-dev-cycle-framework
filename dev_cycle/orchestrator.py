@@ -183,6 +183,27 @@ def _drive(
             result.history.append({"from": state.value, "to": auto.to_state.value, "mode": "auto"})
             continue
 
+        # Try AI runners at specific states
+        if state == State.IMPLEMENTING:
+            from .ai_runner import run_claude
+            meta = _read_meta(cycle_dir)
+            claude_result = run_claude(cycle_dir, meta.get("title", ""))
+            if claude_result["success"]:
+                output(f"  → Claude implementation complete")
+                if claude_result.get("output"):
+                    # Write output to implementation summary
+                    summary_path = cycle_dir / "claude-implementation-summary.md"
+                    summary_path.write_text(
+                        f"# Claude Implementation Summary\n\n"
+                        f"## What Was Done\n\n{claude_result['output'][:2000]}\n"
+                    )
+                _record_transition(cycle_dir, state, State.REVIEW_NEEDED, "auto_claude")
+                result.history.append({"from": state.value, "action": "auto_claude"})
+                continue
+            elif not claude_result["blocked"]:
+                output(f"  Claude runner failed: {claude_result['reason']}")
+            # If blocked or failed, fall through to interactive/non-interactive
+
         # Non-interactive: use default action or block
         if non_interactive:
             default = get_default_action(state)

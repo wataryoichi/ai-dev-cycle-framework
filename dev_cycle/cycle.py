@@ -257,14 +257,17 @@ def start_cycle(cfg: Config, version: str, title: str) -> Path:
     }
     _write_meta(cycle_dir, meta)
 
-    (cycle_dir / "request.md").write_text(
-        f"# Request — {title}\n\n"
-        f"**Version:** {version}\n\n"
-        "## Goal\n\n<!-- Describe the goal of this cycle -->\n\n"
-        "## Context\n\n<!-- Why is this needed? What problem does it solve? -->\n\n"
-        "## Scope\n\n<!-- What's in scope and out of scope -->\n\n"
-        "## Notes\n\n<!-- Any constraints, dependencies, or references -->\n"
-    )
+    # Dual output: Markdown + JSON for request
+    from .dual_output import write_request
+    write_request(cycle_dir, title, version)
+
+    # Cycle state JSON
+    (cycle_dir / "cycle_state.json").write_text(json.dumps({
+        "cycle_id": cid, "state": "started", "version": version,
+        "title": title, "started_at": meta["started_at"],
+    }, indent=2) + "\n")
+
+    # Markdown templates (backward compat)
     (cycle_dir / "claude-implementation-summary.md").write_text(IMPLEMENTATION_SUMMARY_TEMPLATE)
     (cycle_dir / "codex-review.md").write_text(REVIEW_TEMPLATE)
     (cycle_dir / "codex-followup.md").write_text(FOLLOWUP_TEMPLATE)
