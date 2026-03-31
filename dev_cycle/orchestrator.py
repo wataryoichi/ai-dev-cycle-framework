@@ -240,11 +240,26 @@ def _drive(
                 result.history.append({"from": state.value, "action": choice.action})
                 continue
 
-        # Needs input (review text)
+        # Needs input (review text) — try Codex runner first
         transitions = get_transitions(state)
         for t in transitions:
             if t.needs_input == "review_text":
-                output("Codex review needed.")
+                # Try auto Codex review
+                from .ai_runner import run_codex
+                meta = _read_meta(cycle_dir)
+                codex_result = run_codex(cycle_dir, meta.get("title", ""))
+                if codex_result["success"] and codex_result["review_text"]:
+                    output(f"  → Codex review auto-imported")
+                    import_review(cycle_dir, codex_result["review_text"])
+                    finalize_review(cfg, cycle_dir)
+                    _record_transition(cycle_dir, state, State.FOLLOWUP_NEEDED, "auto_codex")
+                    result.history.append({"from": state.value, "action": "auto_codex"})
+                    break
+
+                if codex_result["blocked"]:
+                    output("Codex review needed (DEVCYCLE_CODEX_CMD not set).")
+                else:
+                    output("Codex review needed.")
                 output("  Provide review results to continue.")
                 review_text = inp("review_text", [])
                 if isinstance(review_text, str) and review_text.strip():

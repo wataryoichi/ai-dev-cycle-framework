@@ -89,6 +89,23 @@ class TestTurboRollback:
         assert result["rolled_back"]
         assert result["to_tag"] == "v-a"
 
+    def test_rollback_records_saved(self, git_project: Path) -> None:
+        (git_project / "a.txt").write_text("a")
+        turbo_commit(git_project, "add a")
+        (git_project / "b.txt").write_text("b")
+        turbo_commit(git_project, "add b")
+        result = turbo_rollback(git_project, steps=1, reason="broke things")
+        assert result["rolled_back"]
+        rollback_dir = git_project / "ops" / "rollbacks"
+        assert rollback_dir.exists()
+        json_files = list(rollback_dir.glob("*.json"))
+        md_files = list(rollback_dir.glob("*.md"))
+        assert len(json_files) >= 1
+        assert len(md_files) >= 1
+        import json
+        data = json.loads(json_files[0].read_text())
+        assert data["reason"] == "broke things"
+
 
 class TestTurboHistory:
     def test_shows_commits(self, git_project: Path) -> None:
