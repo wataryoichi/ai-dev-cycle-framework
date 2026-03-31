@@ -55,6 +55,8 @@ class Transition:
     auto: bool = False              # can execute without user input
     needs_input: str | None = None  # e.g. "review_text"
     choices: list[Choice] = field(default_factory=list)
+    default_action: str = ""        # action to take in non-interactive mode
+    blocking_reason: str = ""       # why non-interactive can't proceed
 
 
 def determine_state(cycle_dir: Path) -> State:
@@ -145,6 +147,22 @@ def get_choices(state: State) -> list[Choice]:
     return []
 
 
+def get_default_action(state: State) -> str:
+    """Return the default action for non-interactive mode."""
+    for t in get_transitions(state):
+        if t.default_action:
+            return t.default_action
+    return "exit"
+
+
+def get_blocking_reason(state: State) -> str:
+    """Return why non-interactive can't proceed at this state."""
+    for t in get_transitions(state):
+        if t.blocking_reason:
+            return t.blocking_reason
+    return ""
+
+
 # ── Transition definitions ───────────────────────────────────
 
 _TRANSITIONS: dict[State, list[Transition]] = {
@@ -152,6 +170,7 @@ _TRANSITIONS: dict[State, list[Transition]] = {
         Transition(
             State.STARTED, State.IMPLEMENTING,
             "Fill request.md and begin implementation",
+            blocking_reason="Implementation has not started",
         ),
     ],
     State.IMPLEMENTING: [
@@ -162,6 +181,8 @@ _TRANSITIONS: dict[State, list[Transition]] = {
                 Choice(1, "Done implementing — move to review", "prepare_review"),
                 Choice(2, "Need more time — exit and resume later", "exit"),
             ],
+            default_action="exit",
+            blocking_reason="Implementation in progress — fill summary and resume",
         ),
     ],
     State.REVIEW_NEEDED: [
@@ -176,6 +197,7 @@ _TRANSITIONS: dict[State, list[Transition]] = {
             State.REVIEW_PENDING, State.FOLLOWUP_NEEDED,
             "Import Codex review results",
             needs_input="review_text",
+            blocking_reason="Codex review input required",
         ),
     ],
     State.REVIEW_IMPORTED: [
@@ -201,6 +223,8 @@ _TRANSITIONS: dict[State, list[Transition]] = {
                 Choice(2, "Edit followup first — exit and resume later", "exit"),
                 Choice(3, "No fixes needed — finalize now", "skip_to_finalize"),
             ],
+            default_action="exit",
+            blocking_reason="Followup review and fix decisions needed",
         ),
     ],
     State.FIX_NEEDED: [
@@ -212,6 +236,8 @@ _TRANSITIONS: dict[State, list[Transition]] = {
                 Choice(2, "Request another Codex review", "rereview"),
                 Choice(3, "Still fixing — exit and resume later", "exit"),
             ],
+            default_action="exit",
+            blocking_reason="Fixes in progress — implement fixes and resume",
         ),
     ],
     State.READY_TO_FINALIZE: [
@@ -223,6 +249,8 @@ _TRANSITIONS: dict[State, list[Transition]] = {
                 Choice(2, "Finalize (allow warnings)", "finalize"),
                 Choice(3, "Request another Codex review first", "rereview"),
             ],
+            default_action="finalize",
+            blocking_reason="",
         ),
     ],
 }

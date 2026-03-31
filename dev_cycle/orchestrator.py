@@ -35,7 +35,9 @@ from .state_machine import (
     STATE_TO_PHASE,
     determine_state,
     get_auto_transition,
+    get_blocking_reason,
     get_choices,
+    get_default_action,
     get_transitions,
 )
 
@@ -52,6 +54,8 @@ class RunResult:
     cycle_id: str = ""
     history: list[dict] = field(default_factory=list)
     interrupted: bool = False
+    blocked: bool = False
+    blocked_reason: str = ""
     error: str = ""
 
 
@@ -61,6 +65,7 @@ def run_cycle(
     title: str,
     input_fn: InputFn | None = None,
     output_fn: OutputFn | None = None,
+    non_interactive: bool = False,
 ) -> RunResult:
     """Run a full cycle from start. Returns when completed or interrupted."""
     output = output_fn or _default_output
@@ -68,7 +73,7 @@ def run_cycle(
     meta = _read_meta(cycle_dir)
     output(f"Cycle started: {meta['cycle_id']}")
 
-    return _drive(cfg, cycle_dir, input_fn, output)
+    return _drive(cfg, cycle_dir, input_fn, output, non_interactive)
 
 
 def resume_cycle(
@@ -76,6 +81,7 @@ def resume_cycle(
     cycle_dir: Path,
     input_fn: InputFn | None = None,
     output_fn: OutputFn | None = None,
+    non_interactive: bool = False,
 ) -> RunResult:
     """Resume an interrupted cycle."""
     output = output_fn or _default_output
@@ -91,7 +97,7 @@ def resume_cycle(
         last = history[-1]
         output(f"  Last:   {last.get('mode', last.get('action', '?'))} → {last.get('to', '?')}")
 
-    return _drive(cfg, cycle_dir, input_fn, output)
+    return _drive(cfg, cycle_dir, input_fn, output, non_interactive)
 
 
 def get_status(cfg: Config, cycle_dir: Path) -> dict:
@@ -150,6 +156,7 @@ def _drive(
     cycle_dir: Path,
     input_fn: InputFn | None,
     output: OutputFn,
+    non_interactive: bool = False,
 ) -> RunResult:
     """Drive the state machine loop."""
     meta = _read_meta(cycle_dir)
@@ -176,7 +183,45 @@ def _drive(
             result.history.append({"from": state.value, "to": auto.to_state.value, "mode": "auto"})
             continue
 
-        # Decision point — get choices
+        # Non-interactive: use default action or block
+        if non_interactive:
+            default = get_default_action(state)
+            reason = get_blocking_reason(state)
+
+            if default == "exit" or not default:
+                output(f"  Blocked at: {state.value}")
+                if reason:
+                    output(f"  Reason: {reason}")
+                output(f"  Resume with: devcycle resume")
+                result.blocked = True
+                result.blocked_reason = reason
+                result.interrupted = True
+                break
+
+            # Execute the default action
+            choice_obj = None
+            for c in get_choices(state):
+                if c.action == default:
+                    choice_obj = c
+                    break
+            if choice_obj:
+                output(f"  → [auto] {choice_obj.label}")
+                ok = _execute_choice(cfg, cycle_dir, state, choice_obj, inp, output)
+                if not ok:
+                    result.blocked = True
+                    result.blocked_reason = f"Default action failed: {default}"
+                    result.interrupted = True
+                    break
+                _record_transition(cycle_dir, state, determine_state(cycle_dir), f"auto:{default}")
+                result.history.append({"from": state.value, "action": default, "mode": "non_interactive"})
+                continue
+            else:
+                result.blocked = True
+                result.blocked_reason = reason
+                result.interrupted = True
+                break
+
+        # Interactive: decision point — get choices
         choices = get_choices(state)
         if choices:
             choice = inp(f"State: {state.value}", choices)
