@@ -587,6 +587,57 @@ def cmd_append_history(args: argparse.Namespace) -> None:
     print(f"Appended to {cfg.version_history_path}")
 
 
+# ── turbo / rollback / history ────────────────────────────────
+
+def cmd_turbo(args: argparse.Namespace) -> None:
+    from .turbo import run_turbo
+    cfg = Config.load(Path(args.project_root))
+    push = not getattr(args, "no_push", False)
+    ni = getattr(args, "non_interactive", False)
+    dry = getattr(args, "dry_run", False)
+    is_json = getattr(args, "json", False)
+
+    output = (lambda m: print(m, file=sys.stderr)) if is_json else (lambda m: print(m))
+    result = run_turbo(cfg, args.title, push=push, non_interactive=ni,
+                       dry_run=dry, output_fn=output)
+
+    if is_json:
+        print(json.dumps(result, indent=2))
+    if result.get("blocked"):
+        sys.exit(2)
+
+
+def cmd_rollback(args: argparse.Namespace) -> None:
+    from .turbo import turbo_rollback
+    root = Path(args.project_root).resolve()
+    result = turbo_rollback(root, target=getattr(args, "to", None),
+                            steps=getattr(args, "steps", 1))
+    if getattr(args, "json", False):
+        print(json.dumps(result, indent=2))
+        return
+    if result["rolled_back"]:
+        print(f"Rolled back: {result['from_sha']} → {result['to_sha']}")
+        if result["to_tag"]:
+            print(f"  Tag: {result['to_tag']}")
+    else:
+        print("Nothing to roll back.")
+
+
+def cmd_history(args: argparse.Namespace) -> None:
+    from .turbo import turbo_history
+    root = Path(args.project_root).resolve()
+    entries = turbo_history(root, limit=getattr(args, "limit", 20))
+    if getattr(args, "json", False):
+        print(json.dumps(entries, indent=2))
+        return
+    if not entries:
+        print("No history.")
+        return
+    for e in entries:
+        tags = " ".join(f"[{t}]" for t in e["tags"]) if e["tags"] else ""
+        print(f"  {e['sha']}  {e['message']}  {tags}".rstrip())
+
+
 # ── run / resume / status (orchestrator) ─────────────────────
 
 def cmd_run(args: argparse.Namespace) -> None:
@@ -751,14 +802,15 @@ def main() -> None:
         prog="devcycle",
         description=(
             "AI Dev Cycle Framework — Claude→Codex→Claude orchestrator.\n\n"
-            "Quick start:\n"
+            "Turbo mode (fast, auto commit/tag/push):\n"
+            "  devcycle turbo --title 'build prototype'\n"
+            "  devcycle rollback\n"
+            "  devcycle history\n\n"
+            "Guided mode (interactive, step by step):\n"
             "  devcycle run --version v0.1.0 --title 'my feature'\n"
-            "  devcycle resume    # continue an interrupted cycle\n"
-            "  devcycle status    # show current state\n\n"
-            "The orchestrator runs each phase automatically and prompts\n"
-            "for input only at decision points (review input, fix decisions).\n\n"
-            "Manual mode (advanced):\n"
-            "  start → prepare → review-loop → followup → check → finalize"
+            "  devcycle resume / status\n\n"
+            "Turbo runs the full Claude→Codex→Claude cycle then auto-commits.\n"
+            "Guided mode pauses at each decision point for your input."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -771,7 +823,32 @@ def main() -> None:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    # ── Orchestrator (primary) ──────────────────────────────
+    # ── Turbo mode ──────────────────────────────────────────
+
+    p = _add(sub, ["turbo", "auto"],
+             help="Full cycle + auto commit/tag/push (Claude→Codex→Claude)")
+    p.add_argument("--title", "-t", required=True, help="What this cycle does")
+    p.add_argument("--no-push", action="store_true", help="Commit and tag but skip push")
+    p.add_argument("--non-interactive", "-n", action="store_true",
+                    help="Auto-advance where safe, block where input needed")
+    p.add_argument("--dry-run", action="store_true", help="Show what would happen, don't execute")
+    _json_arg(p)
+    p.set_defaults(func=cmd_turbo)
+
+    p = _add(sub, ["rollback"],
+             help="Revert to a previous version (git reset --hard)")
+    p.add_argument("--to", default=None, help="Tag or SHA to roll back to")
+    p.add_argument("--steps", type=int, default=1, help="Commits to go back (default: 1)")
+    _json_arg(p)
+    p.set_defaults(func=cmd_rollback)
+
+    p = _add(sub, ["history", "log"],
+             help="Show recent versions and tags")
+    p.add_argument("--limit", type=int, default=20, help="Number of entries")
+    _json_arg(p)
+    p.set_defaults(func=cmd_history)
+
+    # ── Guided mode ─────────────────────────────────────────
 
     p = _add(sub, ["run"],
              help="Run a full cycle — auto-executes steps, prompts at decision points")
