@@ -11,7 +11,31 @@ devcycle setup-hooks   # install git hooks
 source <(devcycle completion bash)  # optional: shell completion
 ```
 
-## Full Cycle
+## Branch Strategy
+
+- Small fix → same branch is fine
+- New feature or larger change → create a feature branch
+- `doctor` warns if you're on main or have a dirty tree
+- One cycle per branch is the simplest approach
+
+```bash
+git checkout -b feat/my-change
+devcycle run --version v0.2.0 --title "my change"
+# ... cycle completes ...
+git push && create PR
+```
+
+## Full Cycle (Orchestrator)
+
+```bash
+# Recommended: use `run` for the full guided flow
+git checkout -b feat/your-change
+devcycle run --version v0.2.0 --title "your change"
+devcycle resume    # if interrupted
+devcycle status    # to check progress
+```
+
+## Full Cycle (Manual)
 
 ```bash
 # 1. Start

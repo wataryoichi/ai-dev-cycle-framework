@@ -647,15 +647,28 @@ def cmd_status(args: argparse.Namespace) -> None:
         print(json.dumps(status, indent=2))
         return
 
+    # Git info
+    branch = status.get("branch", "")
+    sha = status.get("head_sha", "")
+    dirty = status.get("dirty", False)
+    git_line = branch
+    if sha:
+        git_line += f" ({sha})"
+    if dirty:
+        git_line += " [dirty]"
+
     print(f"Cycle:    {status['cycle_id']}")
     print(f"State:    {status['state']}")
-    print(f"Phase:    {status['phase']}")
     print(f"Progress: {status['progress_pct']}%")
+    if git_line:
+        print(f"Branch:   {git_line}")
     q = status["quality"]
     print(f"Quality:  {q['ready']} ready / {q['placeholder']} placeholder / {q['missing']} missing")
     f = status["findings"]
     if f["total"] > 0:
         print(f"Findings: {f['high']} high / {f['medium']} medium / {f['low']} low")
+    if q.get("strict_ready"):
+        print(f"Strict:   ready")
     print()
 
     if status["choices"]:
@@ -663,13 +676,13 @@ def cmd_status(args: argparse.Namespace) -> None:
         for c in status["choices"]:
             print(f"  {c['key']}. {c['label']}")
         print()
-        print("Run: devcycle resume")
+        print("Continue: devcycle resume")
     elif status["available_actions"]:
         action = status["available_actions"][0]
         auto_label = " (auto)" if action["auto"] else ""
         print(f"Next: {action['description']}{auto_label}")
         print()
-        print("Run: devcycle resume")
+        print("Continue: devcycle resume")
 
 
 # ── doctor ───────────────────────────────────────────────────

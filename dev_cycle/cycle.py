@@ -147,6 +147,21 @@ FINAL_SUMMARY_TEMPLATE = """\
 """
 
 
+def git_info(cwd: Path) -> dict:
+    """Get git branch, HEAD SHA, and working tree status."""
+    branch = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd) or ""
+    sha = _run_git(["rev-parse", "--short", "HEAD"], cwd) or ""
+    status_output = _run_git(["status", "--porcelain"], cwd)
+    dirty = bool(status_output.strip()) if status_output else False
+    detached = branch == "HEAD"
+    return {
+        "branch": branch if not detached else "(detached)",
+        "head_sha": sha,
+        "dirty": dirty,
+        "detached": detached,
+    }
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
