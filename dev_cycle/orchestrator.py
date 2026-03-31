@@ -66,10 +66,19 @@ def run_cycle(
     input_fn: InputFn | None = None,
     output_fn: OutputFn | None = None,
     non_interactive: bool = False,
+    spec_path: str | None = None,
 ) -> RunResult:
     """Run a full cycle from start. Returns when completed or interrupted."""
     output = output_fn or _default_output
-    cycle_dir = start_cycle(cfg, version, title)
+
+    # Find and load spec (same logic as turbo)
+    from .spec_reader import find_spec, read_spec, empty_spec
+    spec_file = find_spec(cfg.project_root, spec_path)
+    spec = read_spec(spec_file) if spec_file else empty_spec()
+    if spec["present"]:
+        output(f"  Spec: {spec['path']}")
+
+    cycle_dir = start_cycle(cfg, version, title, spec=spec)
     meta = _read_meta(cycle_dir)
     output(f"Cycle started: {meta['cycle_id']}")
 
@@ -186,34 +195,21 @@ def _drive(
         # Try AI runners at specific states
         if state == State.IMPLEMENTING:
             from .ai_runner import run_claude
+            from .spec_reader import load_spec_from_meta
             meta = _read_meta(cycle_dir)
-            # Load spec if available
-            spec = None
-            if meta.get("spec_path"):
-                from .spec_reader import read_spec
-                from pathlib import Path as _P
-                sp = _P(meta["spec_path"])
-                if sp.exists():
-                    spec = read_spec(sp)
+            spec = load_spec_from_meta(cycle_dir)
             claude_result = run_claude(cycle_dir, meta.get("title", ""), spec=spec)
             if claude_result["success"]:
                 output(f"  → Claude implementation complete")
                 impl_text = claude_result.get("output", "")[:2000]
                 if impl_text:
-                    # Write dual output: Markdown + JSON
-                    (cycle_dir / "claude-implementation-summary.md").write_text(
-                        f"# Claude Implementation Summary\n\n"
-                        f"## What Was Done\n\n{impl_text}\n"
-                    )
-                    import json as _json
-                    (cycle_dir / "implementation_summary.json").write_text(
-                        _json.dumps({
-                            "title": meta.get("title", ""),
-                            "summary": impl_text,
-                            "spec_path": meta.get("spec_path", ""),
-                            "spec_digest": meta.get("spec_digest", ""),
-                            "state": "review_needed",
-                        }, indent=2) + "\n"
+                    from .dual_output import write_implementation_summary
+                    write_implementation_summary(
+                        cycle_dir,
+                        title=meta.get("title", ""),
+                        summary=impl_text,
+                        spec_path=meta.get("spec_path", ""),
+                        spec_digest=meta.get("spec_digest", ""),
                     )
                 _record_transition(cycle_dir, state, State.REVIEW_NEEDED, "auto_claude")
                 result.history.append({"from": state.value, "action": "auto_claude"})
@@ -285,14 +281,9 @@ def _drive(
             if t.needs_input == "review_text":
                 # Try auto Codex review
                 from .ai_runner import run_codex
+                from .spec_reader import load_spec_from_meta
                 meta = _read_meta(cycle_dir)
-                codex_spec = None
-                if meta.get("spec_path"):
-                    from .spec_reader import read_spec
-                    from pathlib import Path as _P
-                    sp = _P(meta["spec_path"])
-                    if sp.exists():
-                        codex_spec = read_spec(sp)
+                codex_spec = load_spec_from_meta(cycle_dir)
                 codex_result = run_codex(cycle_dir, meta.get("title", ""), spec=codex_spec)
                 if codex_result["success"] and codex_result["review_text"]:
                     output(f"  → Codex review auto-imported")

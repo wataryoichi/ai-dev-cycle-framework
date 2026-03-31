@@ -263,24 +263,10 @@ def start_cycle(cfg: Config, version: str, title: str, spec: dict | None = None)
         meta["spec_digest"] = spec.get("digest", "")
     _write_meta(cycle_dir, meta)
 
-    # Dual output: Markdown + JSON for request
+    # Dual output: Markdown + JSON for request (includes spec if present)
     from .dual_output import write_request
-    goal = ""
-    if spec and spec.get("present"):
-        goal = spec.get("summary", "")[:200]
-    write_request(cycle_dir, title, version, goal=goal,
-                  context=f"Spec: {spec['path']}" if spec and spec.get("present") else "")
-
-    # Spec fields in request.json
-    if spec:
-        req_json_path = cycle_dir / "request.json"
-        if req_json_path.exists():
-            req_data = json.loads(req_json_path.read_text())
-            req_data["spec_path"] = spec.get("path", "")
-            req_data["spec_present"] = spec.get("present", False)
-            req_data["spec_digest"] = spec.get("digest", "")
-            req_data["spec_summary"] = spec.get("summary", "")
-            req_json_path.write_text(json.dumps(req_data, indent=2) + "\n")
+    goal = spec.get("summary", "")[:200] if spec and spec.get("present") else ""
+    write_request(cycle_dir, title, version, goal=goal, spec=spec)
 
     # Cycle state JSON
     state_data = {
