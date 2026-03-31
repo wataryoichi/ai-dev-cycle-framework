@@ -149,8 +149,13 @@ def run_turbo(
     spec_file = find_spec(root, spec_path)
     spec = read_spec(spec_file) if spec_file else empty_spec()
 
+    from .chain import build_carry_forward, write_chain_summary
+
     all_cycles = []
     prev_cycle_id = ""
+    prev_cycle_dir = None
+    root_cycle_id = ""
+    stopped_reason = "max_cycles_reached"
 
     for iteration in range(cycles):
         import time
@@ -169,12 +174,19 @@ def run_turbo(
         cycle_dir = start_cycle(cfg, version, title, spec=spec, lang=lang)
         meta = _read_meta(cycle_dir)
 
-        # Record multi-cycle context
+        if iteration == 0:
+            root_cycle_id = meta["cycle_id"]
+
+        # Record multi-cycle context + carry-forward
+        meta["root_cycle_id"] = root_cycle_id
+        meta["iteration_index"] = iteration
+        meta["iteration_total"] = cycles
         if prev_cycle_id:
             meta["previous_cycle_id"] = prev_cycle_id
-            meta["iteration_index"] = iteration
-            meta["iteration_total"] = cycles
-            _write_meta(cycle_dir, meta)
+        if prev_cycle_dir:
+            carry = build_carry_forward(prev_cycle_dir)
+            meta["carry_forward"] = carry
+        _write_meta(cycle_dir, meta)
 
         output(f"Turbo: {meta['cycle_id']}")
         output(f"  Version: {version}")
@@ -216,17 +228,26 @@ def run_turbo(
         }
         all_cycles.append(cycle_info)
         prev_cycle_id = meta["cycle_id"]
+        prev_cycle_dir = cycle_dir
 
         # Stop conditions
         if orch_result.blocked or orch_result.interrupted:
+            stopped_reason = "blocked" if orch_result.blocked else "interrupted"
             break
         if state == State.COMPLETED:
-            continue  # next cycle
+            stopped_reason = "completed" if iteration == cycles - 1 else "max_cycles_reached"
+            continue
+
+    # Write chain summary if multi-cycle
+    if cycles > 1:
+        write_chain_summary(cfg.cycle_root_path, all_cycles, stopped_reason, lang=lang)
 
     # Return last cycle result + multi-cycle summary
     last = all_cycles[-1] if all_cycles else {}
     last["requested_cycles"] = cycles
     last["executed_cycles"] = len(all_cycles)
+    last["stopped_reason"] = stopped_reason
+    last["root_cycle_id"] = root_cycle_id
     last["all_cycles"] = [c["cycle_id"] for c in all_cycles]
     last["history"] = getattr(orch_result, "history", []) if 'orch_result' in dir() else []
     return last

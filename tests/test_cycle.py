@@ -145,7 +145,7 @@ class TestCheckCycle:
         (cycle_dir / "codex-followup.md").write_text("# F\n\nOK.\n")
         (cycle_dir / "final-summary.md").write_text("# Final\n\nContent without sections.\n")
         result = check_cycle(cycle_dir)
-        assert any("missing ## Overview" in w for w in result["section_warnings"])
+        assert any("missing overview" in w.lower() for w in result["section_warnings"])
 
 
 class TestFinalizeCycle:
