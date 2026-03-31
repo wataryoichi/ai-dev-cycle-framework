@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "ai-dev-cycle-framework"
+version = "0.1.0"
+description = "Multi-project AI development cycle framework with self-application support"
+requires-python = ">=3.10"
+license = "MIT"
+
+[project.scripts]
+devcycle = "dev_cycle.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["dev_cycle*"]

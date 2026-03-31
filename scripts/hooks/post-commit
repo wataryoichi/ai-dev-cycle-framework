@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#
+# post-commit hook — auto-create a git tag when the commit message
+# starts with vX.Y.Z (e.g. "v0.2.0: add filtering to show-index").
+#
+# Install: git config core.hooksPath scripts/hooks
+# Or:      python3 -m dev_cycle.cli setup-hooks
+
+set -euo pipefail
+
+MSG=$(git log -1 --pretty=%s)
+VERSION=$(echo "$MSG" | grep -oP '^v\d+\.\d+\.\d+' | head -1 || true)
+
+if [ -z "$VERSION" ]; then
+    exit 0
+fi
+
+if git tag -l "$VERSION" | grep -q "^$VERSION$"; then
+    echo "[auto-tag] Tag $VERSION already exists — skipping."
+else
+    git tag "$VERSION"
+    echo "[auto-tag] Created tag: $VERSION"
+fi

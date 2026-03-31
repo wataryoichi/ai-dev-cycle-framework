@@ -1,0 +1,9 @@
+{
+  "project_name": "your-project-name",
+  "cycle_root": "ops/dev-cycles",
+  "version_history_file": "docs/version-history.md",
+  "default_branch": "main",
+  "reviewers": ["codex"],
+  "store_git_diff": true,
+  "store_git_status": true
+}
