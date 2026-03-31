@@ -67,6 +67,7 @@ def run_cycle(
     output_fn: OutputFn | None = None,
     non_interactive: bool = False,
     spec_path: str | None = None,
+    lang: str = "en",
 ) -> RunResult:
     """Run a full cycle from start. Returns when completed or interrupted."""
     output = output_fn or _default_output
@@ -78,7 +79,7 @@ def run_cycle(
     if spec["present"]:
         output(f"  Spec: {spec['path']}")
 
-    cycle_dir = start_cycle(cfg, version, title, spec=spec)
+    cycle_dir = start_cycle(cfg, version, title, spec=spec, lang=lang)
     meta = _read_meta(cycle_dir)
     output(f"Cycle started: {meta['cycle_id']}")
 
