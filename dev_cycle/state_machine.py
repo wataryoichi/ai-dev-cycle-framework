@@ -112,12 +112,19 @@ def determine_state(cycle_dir: Path) -> State:
         return State.REVIEW_NEEDED
 
     if phase == "started":
-        from .i18n import has_section, has_placeholder
+        from .i18n import has_section, PLACEHOLDER_PATTERNS
         req = cycle_dir / "request.md"
         req_has_goal = False
         if req.exists():
             content = req.read_text()
-            req_has_goal = has_section(content, "goal") and not has_placeholder(content)
+            if has_section(content, "goal"):
+                # Extract the goal section content only
+                import re
+                goal_match = re.search(r"##\s+(?:Goal|目的)\s*\n(.*?)(?=\n##|\Z)", content, re.DOTALL)
+                if goal_match:
+                    goal_text = goal_match.group(1).strip()
+                    goal_is_placeholder = any(p in goal_text for p in PLACEHOLDER_PATTERNS)
+                    req_has_goal = bool(goal_text) and not goal_is_placeholder
         if req_has_goal:
             return State.IMPLEMENTING
         return State.STARTED
