@@ -654,7 +654,9 @@ def cmd_run(args: argparse.Namespace) -> None:
             print(msg)
 
     ni = getattr(args, "non_interactive", False)
-    result = run_cycle(cfg, args.version, args.title, output_fn=output, non_interactive=ni)
+    spec_arg = getattr(args, "spec", None)
+    result = run_cycle(cfg, args.version, args.title, output_fn=output,
+                       non_interactive=ni, spec_path=spec_arg)
 
     if getattr(args, "json", False):
         print(json.dumps({
@@ -858,6 +860,7 @@ def main() -> None:
              help="Run a full cycle — auto-executes steps, prompts at decision points")
     p.add_argument("--version", required=True, help="Version label (e.g. v0.1.0)")
     p.add_argument("--title", required=True, help="Short cycle title")
+    p.add_argument("--spec", default=None, help="Path to spec file (default: docs/spec.md)")
     p.add_argument("--non-interactive", "-n", action="store_true",
                     help="Auto-advance where safe, block where input needed")
     _json_arg(p)

@@ -106,10 +106,22 @@ def _build_impl_prompt(cycle_dir: Path, title: str, goal: str,
     ]
 
     if spec and spec.get("present"):
-        parts.append(f"\nSpec ({spec.get('path', 'docs/spec.md')}):")
-        parts.append(spec.get("summary", "")[:1000])
+        parts.append(f"\nSpec: {spec.get('path', '')}")
+        parts.append(f"Summary: {spec.get('summary', '')[:500]}")
+        if spec.get("constraints"):
+            parts.append(f"\nConstraints:")
+            for c in spec["constraints"][:10]:
+                parts.append(f"  - {c}")
+        if spec.get("expected_outputs"):
+            parts.append(f"\nExpected outputs:")
+            for o in spec["expected_outputs"][:10]:
+                parts.append(f"  - {o}")
+        if spec.get("non_goals"):
+            parts.append(f"\nNon-goals (do NOT implement):")
+            for n in spec["non_goals"][:5]:
+                parts.append(f"  - {n}")
         if spec.get("body"):
-            parts.append(f"\nFull spec:\n{spec['body'][:3000]}")
+            parts.append(f"\nFull spec:\n{spec['body'][:2000]}")
 
     parts.extend([
         f"\nRequest:\n{request_content}",
@@ -124,11 +136,24 @@ def _build_impl_prompt(cycle_dir: Path, title: str, goal: str,
 
 def _build_review_prompt(title: str, spec: dict | None = None) -> str:
     """Build a structured prompt for Codex review."""
-    base = (
-        f"Review the changes for: {title}. "
-        f"Focus on correctness, edge cases, and maintainability. "
-        f"Structure findings as High / Medium / Low severity."
-    )
-    if spec and spec.get("present") and spec.get("summary"):
-        base += f" The spec goal: {spec['summary'][:300]}"
-    return base
+    parts = [
+        f"Review the changes for: {title}.",
+        "Focus on correctness, edge cases, and maintainability.",
+        "Structure findings as High / Medium / Low severity.",
+    ]
+    if spec and spec.get("present"):
+        if spec.get("summary"):
+            parts.append(f"Spec goal: {spec['summary'][:300]}")
+        if spec.get("acceptance_criteria"):
+            parts.append("Acceptance criteria:")
+            for ac in spec["acceptance_criteria"][:5]:
+                parts.append(f"  - {ac}")
+        if spec.get("constraints"):
+            parts.append("Constraints to verify:")
+            for c in spec["constraints"][:5]:
+                parts.append(f"  - {c}")
+        if spec.get("non_goals"):
+            parts.append("Non-goals (should NOT be implemented):")
+            for n in spec["non_goals"][:3]:
+                parts.append(f"  - {n}")
+    return " ".join(parts)

@@ -4,9 +4,12 @@
 Initial framework: CLI, config, cycle management, auto-tag hook.
 
 ### v0.2.0 — Orchestrator
-State machine, run/resume/status, choice UI, non-interactive mode. 157 tests.
+State machine, run/resume/status, choice UI, non-interactive mode.
 
 ### v0.3.0 — Turbo Mode
-Turbo orchestrator: Claude→Codex→Claude with auto commit/tag/push.
-AI runners, rollback with records, dual JSON output, spec-driven cycles,
-doctor, shell completion. 204 tests.
+Turbo orchestrator, AI runners, rollback, dual JSON, spec-driven cycles.
+
+### v0.4.0 — Spec Contract
+Spec contract formalized. Turbo + Guided mode unified on spec.
+Structured extraction (constraints, outputs, criteria, non-goals).
+Implementation summary via dual_output. 211 tests.
