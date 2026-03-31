@@ -918,7 +918,15 @@ def main() -> None:
     p.set_defaults(func=cmd_completion)
 
     args = parser.parse_args()
-    args.func(args)
+    try:
+        args.func(args)
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        print("Run 'devcycle doctor' to check your setup.", file=sys.stderr)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print(file=sys.stderr)
+        sys.exit(130)
 
 
 if __name__ == "__main__":
