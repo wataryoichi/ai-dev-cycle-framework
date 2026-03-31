@@ -19,6 +19,7 @@ from .cycle import (
     _update_phase,
     check_cycle,
     finalize_cycle,
+    git_info,
     start_cycle,
     StrictFinalizeError,
 )
@@ -80,7 +81,15 @@ def resume_cycle(
     output = output_fn or _default_output
     meta = _read_meta(cycle_dir)
     state = determine_state(cycle_dir)
-    output(f"Resuming: {meta['cycle_id']} (state: {state.value})")
+    gi = git_info(cfg.project_root)
+    history = meta.get("orchestrator_history", [])
+
+    output(f"Resuming: {meta['cycle_id']}")
+    output(f"  State:  {state.value}")
+    output(f"  Branch: {gi['branch']} ({gi['head_sha']})")
+    if history:
+        last = history[-1]
+        output(f"  Last:   {last.get('mode', last.get('action', '?'))} → {last.get('to', '?')}")
 
     return _drive(cfg, cycle_dir, input_fn, output)
 
@@ -102,6 +111,8 @@ def get_status(cfg: Config, cycle_dir: Path) -> dict:
         idx = 0
     progress = int(idx / max(len(all_states) - 1, 1) * 100)
 
+    gi = git_info(cfg.project_root)
+
     return {
         "cycle_id": meta["cycle_id"],
         "version": meta.get("version", ""),
@@ -109,6 +120,9 @@ def get_status(cfg: Config, cycle_dir: Path) -> dict:
         "state": state.value,
         "phase": meta.get("phase", ""),
         "progress_pct": progress,
+        "branch": gi["branch"],
+        "head_sha": gi["head_sha"],
+        "dirty": gi["dirty"],
         "quality": {
             "ready": len(quality["ready"]),
             "placeholder": len(quality["placeholder"]),

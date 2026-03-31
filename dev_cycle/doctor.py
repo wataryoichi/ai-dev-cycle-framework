@@ -46,10 +46,34 @@ def run_doctor(project_root: Path) -> dict:
         checks.append(_check("cycle_root", f"Cycle root missing: {cycle_root.relative_to(root)}", "error",
                               fix=f"mkdir -p {cycle_root.relative_to(root)}"))
 
-    # 5. Git repository
+    # 5. Git repository + branch
     git_dir = root / ".git"
     if git_dir.exists():
         checks.append(_check("git", "Git repository detected", "ok"))
+        # Branch checks
+        try:
+            branch_out = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True, text=True, cwd=root, timeout=10,
+            ).stdout.strip()
+            if branch_out == "HEAD":
+                checks.append(_check("git_branch", "Detached HEAD — consider checking out a branch", "warn"))
+            elif branch_out in ("main", "master"):
+                checks.append(_check("git_branch", f"On {branch_out} — consider a feature branch for changes", "warn"))
+            else:
+                checks.append(_check("git_branch", f"Branch: {branch_out}", "ok"))
+
+            dirty_out = subprocess.run(
+                ["git", "status", "--porcelain"],
+                capture_output=True, text=True, cwd=root, timeout=10,
+            ).stdout.strip()
+            if dirty_out:
+                n = len(dirty_out.splitlines())
+                checks.append(_check("git_dirty", f"Working tree has {n} uncommitted change(s)", "warn"))
+            else:
+                checks.append(_check("git_dirty", "Working tree clean", "ok"))
+        except Exception:
+            pass
     else:
         checks.append(_check("git", "Not a git repository", "warn"))
 

@@ -7,12 +7,14 @@ phase progression and interactive prompts at decision points.
 
 ```bash
 pip install -e .
-devcycle doctor
+devcycle doctor            # check environment, branch, hooks
+source <(devcycle completion bash)  # optional: shell completion
 ```
 
 ## Usage
 
 ```bash
+git checkout -b feat/my-feature   # work on a branch
 devcycle run --version v0.1.0 --title "add user auth"
 ```
 
