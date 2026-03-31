@@ -1,16 +1,12 @@
 # Version History
 
 ### v0.1.0 — Bootstrap
+Initial framework: CLI, config, cycle management, auto-tag hook.
 
-Initial framework: CLI, config, cycle management, Claude Code commands,
-self-hosting docs, git auto-tag hook.
-
-### v0.2.0 — Orchestrator Redesign
-
-State machine, `run`/`resume`/`status`, choice UI, 133 tests.
+### v0.2.0 — Orchestrator
+State machine, run/resume/status, choice UI, non-interactive mode. 157 tests.
 
 ### v0.3.0 — Turbo Mode
-
-`turbo` command: full cycle orchestration + auto commit/tag/push.
-AI runners (Claude + Codex). Rollback with records. Dual JSON output.
-167+ tests.
+Turbo orchestrator: Claude→Codex→Claude with auto commit/tag/push.
+AI runners, rollback with records, dual JSON output, spec-driven cycles,
+doctor, shell completion. 204 tests.

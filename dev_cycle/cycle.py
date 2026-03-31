@@ -167,8 +167,11 @@ def _now_iso() -> str:
 
 
 def _cycle_id(version: str, title: str) -> str:
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     slug = title.lower().replace(" ", "-")[:40]
+    # If version already contains a timestamp (turbo mode), skip adding another
+    if version.startswith("dev-") and len(version) > 10:
+        return f"{version}_{slug}"
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     return f"{version}_{ts}_{slug}"
 
 
