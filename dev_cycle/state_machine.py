@@ -117,8 +117,10 @@ def determine_state(cycle_dir: Path) -> State:
         req_has_goal = False
         if req.exists():
             content = req.read_text()
-            # Template has "<!-- Describe the goal" — if that's replaced, it's filled
-            req_has_goal = "## Goal" in content and "<!-- Describe" not in content
+            # Check for goal section in any language, without placeholder comments
+            has_goal_header = ("## Goal" in content or "## 目的" in content)
+            has_placeholder = ("<!-- Describe" in content or "<!-- 目的を記述" in content)
+            req_has_goal = has_goal_header and not has_placeholder
         if req_has_goal:
             return State.IMPLEMENTING
         return State.STARTED
