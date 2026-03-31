@@ -39,6 +39,23 @@ To see where you are:
 devcycle status
 ```
 
+### Non-interactive mode (CI / scripts)
+
+```bash
+devcycle run --non-interactive --version v0.1.0 --title "auto cycle"
+devcycle resume --non-interactive
+```
+
+Auto-advances through safe steps. Blocks (exit 2) where human input is needed:
+
+| State | Non-interactive behavior |
+|-------|-------------------------|
+| Auto states (prepare, followup gen) | Advances automatically |
+| `implementing` | Blocks — fill summary first |
+| `review_pending` | Blocks — provide review input |
+| `followup_ready`, `fix_needed` | Blocks — human decisions needed |
+| `ready_to_finalize` | Auto-finalizes (non-strict) |
+
 ## Shell Completion
 
 ```bash

@@ -600,17 +600,22 @@ def cmd_run(args: argparse.Namespace) -> None:
         def output(msg):
             print(msg)
 
-    result = run_cycle(cfg, args.version, args.title, output_fn=output)
+    ni = getattr(args, "non_interactive", False)
+    result = run_cycle(cfg, args.version, args.title, output_fn=output, non_interactive=ni)
 
     if getattr(args, "json", False):
         print(json.dumps({
             "cycle_id": result.cycle_id,
             "state": result.state.value,
             "interrupted": result.interrupted,
+            "blocked": result.blocked,
+            "blocked_reason": result.blocked_reason,
             "error": result.error,
             "history": result.history,
             "cycle_dir": str(result.cycle_dir),
         }, indent=2))
+    if result.blocked:
+        sys.exit(2)
 
 
 def cmd_resume(args: argparse.Namespace) -> None:
@@ -625,16 +630,21 @@ def cmd_resume(args: argparse.Namespace) -> None:
         def output(msg):
             print(msg)
 
-    result = resume_cycle(cfg, cycle_dir, output_fn=output)
+    ni = getattr(args, "non_interactive", False)
+    result = resume_cycle(cfg, cycle_dir, output_fn=output, non_interactive=ni)
 
     if getattr(args, "json", False):
         print(json.dumps({
             "cycle_id": result.cycle_id,
             "state": result.state.value,
             "interrupted": result.interrupted,
+            "blocked": result.blocked,
+            "blocked_reason": result.blocked_reason,
             "error": result.error,
             "history": result.history,
         }, indent=2))
+    if result.blocked:
+        sys.exit(2)
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -767,12 +777,16 @@ def main() -> None:
              help="Run a full cycle — auto-executes steps, prompts at decision points")
     p.add_argument("--version", required=True, help="Version label (e.g. v0.1.0)")
     p.add_argument("--title", required=True, help="Short cycle title")
+    p.add_argument("--non-interactive", "-n", action="store_true",
+                    help="Auto-advance where safe, block where input needed")
     _json_arg(p)
     p.set_defaults(func=cmd_run)
 
     p = _add(sub, ["resume"],
              help="Continue an interrupted cycle from where it stopped")
     _cycle_dir_arg(p)
+    p.add_argument("--non-interactive", "-n", action="store_true",
+                    help="Auto-advance where safe, block where input needed")
     _json_arg(p)
     p.set_defaults(func=cmd_resume)
 
