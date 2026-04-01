@@ -8,6 +8,16 @@ After any code changes to `dev_cycle/`:
 2. **Run tests**: `python3 -m pytest tests/ --tb=short`
 3. **Smoke test**: `devcycle --version && devcycle doctor`
 
+## Environment
+
+```bash
+# Required
+export DEVCYCLE_CODEX_CMD="codex review"
+
+# Optional
+export DEVCYCLE_CLAUDE_CMD="claude --print"
+```
+
 ## Git workflow
 
 - Work on feature branches, not main
@@ -15,16 +25,14 @@ After any code changes to `dev_cycle/`:
 - Push and create PR via `gh pr create`
 - Squash merge PRs: `gh pr merge N --squash --delete-branch`
 - After merge: `git checkout main && git pull`
-
-## Version tagging
-
-- Commit messages starting with `vX.Y.Z` auto-create git tags (post-commit hook)
-- Use `devcycle turbo --title "..."` for auto version/commit/tag/push
+- Reinstall after merge: `pip install -e . --break-system-packages`
+- Bump version in pyproject.toml + __init__.py for feature PRs
 
 ## Key commands
 
 ```bash
 devcycle turbo --title "..."    # main workflow
+devcycle turbo --title "..." --lang ja --cycles 2
 devcycle rollback               # undo
 devcycle history                # past versions
 devcycle doctor                 # check environment
