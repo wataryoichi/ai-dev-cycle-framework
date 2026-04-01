@@ -1,7 +1,7 @@
 # AI Dev Cycle Framework
 
 Claude→Codex→Claude orchestrator. Auto commit/tag/push. Roll back instantly.
-Multi-cycle. Japanese/English output. **Real Codex review integration verified.**
+Multi-cycle with auto-fix loop. Japanese/English output. GitHub publish.
 
 ## Install
 
@@ -27,6 +27,7 @@ export DEVCYCLE_CLAUDE_CMD="claude --print"
 devcycle turbo --title "build prototype"
 devcycle turbo --title "プロトタイプ構築" --lang ja
 devcycle turbo --title "iterate on review" --cycles 3
+devcycle turbo --title "tetris game" --cycles 3 --github
 ```
 
 What happens with both runners configured:
@@ -34,20 +35,28 @@ What happens with both runners configured:
 2. **Claude runner** auto-implements (or blocks for manual input)
 3. **Codex runner** auto-reviews via `codex review -` (stdin)
 4. Findings parsed by severity, followup draft generated
-5. Blocks at fix decisions (human judgment needed)
-6. Auto-commits, tags, pushes after each cycle
+5. **Auto-fix loop**: Claude fixes findings → Codex re-reviews → repeat
+6. Stable detection: stops when findings reach zero
+7. No-progress detection: stops when findings don't change after fix
+8. Auto-generates `final-summary.md` and project `README.md`
+9. Auto-commits, tags, pushes after each cycle
+10. Optionally creates a GitHub repo (`--github`)
 
 ### Verified E2E Flow
 
 ```
-→ Claude implementation complete
-→ Prepare review and hand off to Codex
-→ Codex review auto-imported
-→ Generate followup draft (1 findings)
-Blocked at: fix_needed
+── Cycle 1/3 ──
+  → Claude implementation complete
+  → Prepare review and hand off to Codex
+  → Codex review auto-imported
+  → Generate followup draft (2 findings)
+  → Auto-fixing 2 finding(s)...
+  → Fix applied
+  → README.md generated
+  Commit: abc1234
+  Tag: devcycle/dev-20260401-052317
+  Pushed
 ```
-
-Codex reviews real code, finds real issues, generates structured findings.
 
 ### Options
 
@@ -57,6 +66,8 @@ Codex reviews real code, finds real issues, generates structured findings.
 | `--spec` | Spec file path (default: docs/spec.md) |
 | `--lang {en,ja}` | Output language for Markdown |
 | `--cycles N` | Run N cycles consecutively |
+| `--max-fix-rounds N` | Max fix+rereview rounds per cycle (default: 3) |
+| `--github` | Create a GitHub repo and push the result |
 | `--no-push` | Commit+tag only |
 | `--non-interactive` | Auto-advance, block where input needed |
 | `--dry-run` | Preview without executing |
@@ -68,6 +79,22 @@ Codex reviews real code, finds real issues, generates structured findings.
 devcycle rollback
 devcycle history
 ```
+
+## Auto-fix Loop
+
+When Codex finds issues, the framework automatically:
+1. Builds a fix plan from review findings (`fix_plan.json`)
+2. Sends Claude a targeted fix prompt
+3. Triggers a Codex re-review
+4. Repeats until stable (0 findings) or no-progress detected
+
+Control with `--max-fix-rounds N` (default: 3).
+
+Stopped reasons:
+- `stable` — no findings after fix
+- `no_progress` — same findings after fix+rereview
+- `max_fix_rounds_reached` — fix limit hit
+- `blocked` — human input needed
 
 ## Multi-cycle
 
@@ -82,11 +109,18 @@ Each cycle carries forward context from the previous:
 
 Chain summary saved as `run_summary.json` + `run_summary.md`.
 
+## Auto-generated Files
+
+Each cycle automatically produces:
+- `final-summary.md` — overview, changes, verification, remaining issues
+- `README.md` (project root) — title, description, artifact list for GitHub
+
 ## Prompt Artifacts
 
 Each cycle saves the prompts sent to AI runners:
 - `claude-prompt.txt` — what Claude received (includes spec + carry-forward)
 - `codex-prompt.txt` — what Codex received (includes acceptance criteria)
+- `claude-fix-prompt.txt` — what Claude received for fix rounds
 
 ## Dual Output
 
@@ -98,7 +132,8 @@ ops/dev-cycles/<cycle_id>/
   implementation_summary.json / final_summary.json
   request.md / codex-review.md / codex-followup.md
   claude-implementation-summary.md / final-summary.md
-  claude-prompt.txt / codex-prompt.txt
+  claude-prompt.txt / codex-prompt.txt / claude-fix-prompt.txt
+  fix_plan.json / findings_diff.json
 ```
 
 ## Commands

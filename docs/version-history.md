@@ -29,3 +29,15 @@ Auto-fix: finding → Claude fix → Codex rereview → no-progress detection.
 Fix plan (JSON), prompt artifacts, stderr capture.
 Stopped reasons: max_fix_rounds, no_progress, runner timeouts.
 Release checklist added. 244 tests.
+
+### v0.8.1 — Fix-loop Polish + README + GitHub
+- `--max-fix-rounds` CLI option to control fix loop limit.
+- `--github` flag: create a GitHub repo and push via `gh` CLI.
+- Auto-generate `final-summary.md` from implementation + review findings.
+- Auto-generate `README.md` at project root for GitHub presentation.
+- No-progress detection moved after Codex rereview (was firing too early).
+- Title used as goal fallback so turbo cycles start implementing immediately.
+- ASCII-only cycle folder names (hash fallback for non-ASCII titles).
+- Findings diff tracking between fix rounds (`findings_diff.json`).
+- Stable detection: auto-complete when findings reach zero after fix.
+- 244 tests.
