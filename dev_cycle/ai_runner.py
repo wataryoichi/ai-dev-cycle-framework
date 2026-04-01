@@ -23,7 +23,8 @@ def get_codex_cmd() -> str:
     return os.environ.get("DEVCYCLE_CODEX_CMD", "")
 
 
-def run_claude(cycle_dir: Path, title: str, goal: str = "", spec: dict | None = None) -> dict:
+def run_claude(cycle_dir: Path, title: str, goal: str = "", spec: dict | None = None,
+               carry_forward: dict | None = None) -> dict:
     """Run Claude implementation. Returns result dict.
 
     If DEVCYCLE_CLAUDE_CMD is not set, returns blocked result.
@@ -38,7 +39,11 @@ def run_claude(cycle_dir: Path, title: str, goal: str = "", spec: dict | None = 
             "output": "",
         }
 
-    prompt = _build_impl_prompt(cycle_dir, title, goal, spec)
+    prompt = _build_impl_prompt(cycle_dir, title, goal, spec, carry_forward)
+
+    # Save prompt artifact for debug/audit
+    from .chain import save_prompt_artifact
+    save_prompt_artifact(cycle_dir, "claude", prompt)
 
     try:
         result = subprocess.run(
@@ -75,9 +80,13 @@ def run_codex(cycle_dir: Path, title: str, spec: dict | None = None) -> dict:
 
     prompt = _build_review_prompt(title, spec)
 
+    from .chain import save_prompt_artifact
+    save_prompt_artifact(cycle_dir, "codex", prompt)
+
     try:
+        # Use stdin via '-' arg for safe prompt passing
         result = subprocess.run(
-            f'{cmd} "{prompt}"', shell=True, capture_output=True,
+            f"{cmd} -", shell=True, input=prompt, capture_output=True,
             text=True, timeout=300, cwd=cycle_dir.parent.parent,
         )
         review_text = result.stdout.strip()
@@ -94,7 +103,8 @@ def run_codex(cycle_dir: Path, title: str, spec: dict | None = None) -> dict:
 
 
 def _build_impl_prompt(cycle_dir: Path, title: str, goal: str,
-                       spec: dict | None = None) -> str:
+                       spec: dict | None = None,
+                       carry_forward: dict | None = None) -> str:
     """Build a structured prompt for Claude implementation."""
     request_path = cycle_dir / "request.md"
     request_content = request_path.read_text() if request_path.exists() else ""
@@ -122,6 +132,17 @@ def _build_impl_prompt(cycle_dir: Path, title: str, goal: str,
                 parts.append(f"  - {n}")
         if spec.get("body"):
             parts.append(f"\nFull spec:\n{spec['body'][:2000]}")
+
+    if carry_forward:
+        parts.append("\n--- Previous cycle context ---")
+        if carry_forward.get("previous_cycle_id"):
+            parts.append(f"Previous cycle: {carry_forward['previous_cycle_id']}")
+        if carry_forward.get("previous_summary"):
+            parts.append(f"Previous implementation: {carry_forward['previous_summary'][:500]}")
+        findings = carry_forward.get("outstanding_findings", {})
+        if any(findings.get(k, 0) > 0 for k in ("high", "medium", "low")):
+            parts.append(f"Outstanding findings: {findings.get('high',0)} high, {findings.get('medium',0)} medium, {findings.get('low',0)} low")
+            parts.append("Please address these findings in this iteration.")
 
     parts.extend([
         f"\nRequest:\n{request_content}",
