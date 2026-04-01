@@ -1,0 +1,32 @@
+Implement the following:
+
+Title: テトリス風落ちものパズルゲーム（HTML+JS）
+Goal: Fix review findings
+
+Request:
+# リクエスト — テトリス風落ちものパズルゲーム（HTML+JS）
+
+**Version:** dev-20260401-052317
+
+## 目的
+
+テトリス風落ちものパズルゲーム（HTML+JS）
+
+## 背景
+
+<!-- なぜ必要か -->
+
+## スコープ
+
+<!-- スコープ内/外 -->
+
+## 補足
+
+<!-- 制約、依存関係 -->
+
+
+After implementation, update claude-implementation-summary.md with:
+- What was done
+- Key decisions
+- Changed files
+- How to verify

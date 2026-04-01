@@ -31,8 +31,10 @@ export DEVCYCLE_CLAUDE_CMD="claude --print"
 ## Key commands
 
 ```bash
-devcycle turbo --title "..."    # main workflow
-devcycle turbo --title "..." --lang ja --cycles 2
+devcycle turbo --title "..."                          # main workflow
+devcycle turbo --title "..." --lang ja --cycles 2     # Japanese, 2 cycles
+devcycle turbo --title "..." --max-fix-rounds 2       # limit fix loops
+devcycle turbo --title "..." --github                 # create GitHub repo
 devcycle rollback               # undo
 devcycle history                # past versions
 devcycle doctor                 # check environment

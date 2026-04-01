@@ -1,0 +1,11 @@
+Fix the following issues found during code review:
+
+- [LOW] [P1] Keep tetromino rotation from drifting after full turns — /home/rw/src/ai-dev-cycle-framework/ops/dev-cycles/dev-20260401-052317_テトリス風落ちものパズルゲーム（html+js）/index.html:162-170
+- [LOW] [P1] Start/restart touch input on the element that is actually tappable — /home/rw/src/ai-dev-cycle-framework/ops/dev-cycles/dev-20260401-052317_テトリス風落ちものパズルゲーム（html+js）/index.html:322-335
+
+Rules:
+- Fix only the identified issues
+- Do not change unrelated code
+- Preserve existing passing behavior
+
+After fixing, update claude-implementation-summary.md.

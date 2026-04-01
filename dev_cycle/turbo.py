@@ -136,6 +136,7 @@ def run_turbo(
     lang: str = "en",
     cycles: int = 1,
     max_fix_rounds: int = 3,
+    continue_from: str | None = None,
     input_fn=None,
     output_fn=None,
 ) -> dict:
@@ -160,6 +161,15 @@ def run_turbo(
     prev_cycle_dir = None
     root_cycle_id = ""
     stopped_reason = STOPPED_MAX_CYCLES
+
+    # Seed from a previous cycle if --continue-from was given
+    if continue_from:
+        cf_dir = cfg.cycle_root_path / continue_from
+        if not (cf_dir / "meta.json").exists():
+            raise FileNotFoundError(f"Cycle not found: {continue_from}")
+        prev_cycle_id = continue_from
+        prev_cycle_dir = cf_dir
+        output(f"  Continuing from: {continue_from}")
 
     for iteration in range(cycles):
         import time
@@ -205,6 +215,12 @@ def run_turbo(
 
         orch_result = _drive(cfg, cycle_dir, input_fn, output, non_interactive, max_fix_rounds)
         state = orch_result.state
+
+        # Generate README at project root
+        from .orchestrator import _generate_readme
+        readme_path = _generate_readme(cycle_dir, root)
+        if readme_path:
+            output(f"  → README.md generated")
 
         # Git afterburner
         commit_result = {"committed": False, "tagged": False, "sha": "", "tag": ""}

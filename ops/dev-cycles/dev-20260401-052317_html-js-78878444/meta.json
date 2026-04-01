@@ -1,0 +1,42 @@
+{
+  "cycle_id": "dev-20260401-052317_html-js-78878444",
+  "version": "dev-20260401-052317",
+  "title": "\u30c6\u30c8\u30ea\u30b9\u98a8\u843d\u3061\u3082\u306e\u30d1\u30ba\u30eb\u30b2\u30fc\u30e0\uff08HTML+JS\uff09",
+  "status": "in_progress",
+  "phase": "review_pending",
+  "started_at": "2026-04-01T05:23:17Z",
+  "finished_at": null,
+  "project": "ai-dev-cycle-framework",
+  "lang": "ja",
+  "root_cycle_id": "dev-20260401-052317_html-js-78878444",
+  "iteration_index": 0,
+  "iteration_total": 3,
+  "orchestrator_state": "review_pending",
+  "orchestrator_history": [
+    {
+      "from": "implementing",
+      "to": "review_needed",
+      "mode": "auto_claude"
+    },
+    {
+      "from": "review_needed",
+      "to": "review_pending",
+      "mode": "auto"
+    },
+    {
+      "from": "review_pending",
+      "to": "followup_needed",
+      "mode": "auto_codex"
+    },
+    {
+      "from": "followup_needed",
+      "to": "followup_ready",
+      "mode": "auto"
+    },
+    {
+      "from": "fix_needed",
+      "to": "review_pending",
+      "mode": "auto_fix"
+    }
+  ]
+}

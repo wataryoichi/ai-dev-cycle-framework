@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>テトリス風落ちものパズル</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #1a1a2e;
+  color: #eee;
+  font-family: 'Segoe UI', 'Hiragino Sans', sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  user-select: none;
+}
+#game-container {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+#main-area { display: flex; flex-direction: column; align-items: center; }
+canvas { border: 2px solid #444; border-radius: 4px; }
+#board { background: #0f0f23; }
+#side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 140px;
+}
+.panel-box {
+  background: #16213e;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+.panel-box h3 { font-size: 13px; color: #888; margin-bottom: 8px; text-transform: uppercase; }
+.panel-box .value { font-size: 22px; font-weight: bold; }
+#next-canvas { background: #0f0f23; margin: 0 auto; display: block; }
+#overlay {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border-radius: 4px;
+  pointer-events: none;
+}
+#overlay h2 { font-size: 28px; margin-bottom: 12px; }
+#overlay p { font-size: 14px; color: #aaa; }
+#board-wrap { position: relative; }
+.controls {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+<div id="game-container">
+  <div id="main-area">
+    <div id="board-wrap">
+      <canvas id="board"></canvas>
+      <div id="overlay">
+        <h2>テトリス風パズル</h2>
+        <p>Press SPACE or tap to start</p>
+      </div>
+    </div>
+    <div class="controls">
+      ← → 移動 ｜ ↑ 回転 ｜ ↓ 落下加速 ｜ Space ハードドロップ
+    </div>
+  </div>
+  <div id="side-panel">
+    <div class="panel-box">
+      <h3>Next</h3>
+      <canvas id="next-canvas" width="100" height="100"></canvas>
+    </div>
+    <div class="panel-box">
+      <h3>Score</h3>
+      <div class="value" id="score">0</div>
+    </div>
+    <div class="panel-box">
+      <h3>Lines</h3>
+      <div class="value" id="lines">0</div>
+    </div>
+    <div class="panel-box">
+      <h3>Level</h3>
+      <div class="value" id="level">1</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const COLS = 10, ROWS = 20, CELL = 28;
+const canvas = document.getElementById('board');
+const ctx = canvas.getContext('2d');
+canvas.width = COLS * CELL;
+canvas.height = ROWS * CELL;
+
+const nextCanvas = document.getElementById('next-canvas');
+const nextCtx = nextCanvas.getContext('2d');
+
+const PIECES = {
+  I: { shape: [[0,0],[1,0],[2,0],[3,0]], color: '#00f0f0' },
+  O: { shape: [[0,0],[1,0],[0,1],[1,1]], color: '#f0f000' },
+  T: { shape: [[0,0],[1,0],[2,0],[1,1]], color: '#a000f0' },
+  S: { shape: [[1,0],[2,0],[0,1],[1,1]], color: '#00f000' },
+  Z: { shape: [[0,0],[1,0],[1,1],[2,1]], color: '#f00000' },
+  J: { shape: [[0,0],[0,1],[1,1],[2,1]], color: '#0000f0' },
+  L: { shape: [[2,0],[0,1],[1,1],[2,1]], color: '#f0a000' },
+};
+const PIECE_NAMES = Object.keys(PIECES);
+
+let board, current, next, score, lines, level, gameOver, started, dropTimer, lastDrop;
+
+function init() {
+  board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+  score = 0; lines = 0; level = 1; gameOver = false; started = false;
+  lastDrop = 0;
+  next = randomPiece();
+  spawnPiece();
+  updateUI();
+  draw();
+}
+
+function randomPiece() {
+  const name = PIECE_NAMES[Math.random() * PIECE_NAMES.length | 0];
+  const p = PIECES[name];
+  const blocks = p.shape.map(b => [...b]);
+  const xs = blocks.map(b => b[0]);
+  const ys = blocks.map(b => b[1]);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  return { blocks, color: p.color, name, cx, cy };
+}
+
+function spawnPiece() {
+  current = next;
+  next = randomPiece();
+  // center piece
+  const minX = Math.min(...current.blocks.map(b => b[0]));
+  const maxX = Math.max(...current.blocks.map(b => b[0]));
+  const offsetX = ((COLS - (maxX - minX + 1)) / 2 | 0) - minX;
+  const minY = Math.min(...current.blocks.map(b => b[1]));
+  current.blocks.forEach(b => { b[0] += offsetX; b[1] -= minY; });
+  current.cx += offsetX;
+  current.cy -= minY;
+  if (!valid(current.blocks)) { gameOver = true; }
+  drawNext();
+}
+
+function valid(blocks) {
+  return blocks.every(([x, y]) =>
+    x >= 0 && x < COLS && y < ROWS && (y < 0 || !board[y][x])
+  );
+}
+
+function move(dx, dy) {
+  const moved = current.blocks.map(([x, y]) => [x + dx, y + dy]);
+  if (valid(moved)) { current.blocks = moved; current.cx += dx; current.cy += dy; return true; }
+  return false;
+}
+
+function rotate() {
+  if (current.name === 'O') return; // O piece doesn't rotate
+  const cx = current.cx;
+  const cy = current.cy;
+  const rotated = current.blocks.map(([x, y]) => {
+    const rx = Math.round(cx + (y - cy));
+    const ry = Math.round(cy - (x - cx));
+    return [rx, ry];
+  });
+  if (valid(rotated)) { current.blocks = rotated; return; }
+  // wall kick: try shifting left/right
+  for (const kick of [-1, 1, -2, 2]) {
+    const kicked = rotated.map(([x, y]) => [x + kick, y]);
+    if (valid(kicked)) { current.blocks = kicked; return; }
+  }
+}
+
+function lock() {
+  current.blocks.forEach(([x, y]) => {
+    if (y >= 0) board[y][x] = current.color;
+  });
+  clearLines();
+  spawnPiece();
+}
+
+function clearLines() {
+  let cleared = 0;
+  for (let r = ROWS - 1; r >= 0; r--) {
+    if (board[r].every(c => c)) {
+      board.splice(r, 1);
+      board.unshift(Array(COLS).fill(null));
+      cleared++;
+      r++; // recheck this row
+    }
+  }
+  if (cleared) {
+    const pts = [0, 100, 300, 500, 800][cleared] || 800;
+    score += pts * level;
+    lines += cleared;
+    level = (lines / 10 | 0) + 1;
+    updateUI();
+  }
+}
+
+function hardDrop() {
+  while (move(0, 1)) { score += 2; }
+  lock();
+  updateUI();
+}
+
+function getDropInterval() {
+  return Math.max(50, 500 - (level - 1) * 40);
+}
+
+function updateUI() {
+  document.getElementById('score').textContent = score;
+  document.getElementById('lines').textContent = lines;
+  document.getElementById('level').textContent = level;
+}
+
+function drawBlock(c, x, y, size, color) {
+  c.fillStyle = color;
+  c.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
+  c.fillStyle = 'rgba(255,255,255,0.15)';
+  c.fillRect(x * size + 1, y * size + 1, size - 2, 3);
+  c.fillRect(x * size + 1, y * size + 1, 3, size - 2);
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // grid
+  ctx.strokeStyle = '#1a1a3a';
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      ctx.strokeRect(c * CELL, r * CELL, CELL, CELL);
+  // board
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (board[r][c]) drawBlock(ctx, c, r, CELL, board[r][c]);
+  // ghost
+  if (current && !gameOver) {
+    let ghostBlocks = current.blocks.map(b => [...b]);
+    while (ghostBlocks.every(([x, y]) => y + 1 < ROWS && (y + 1 < 0 || !board[y + 1][x]))) {
+      ghostBlocks.forEach(b => b[1]++);
+    }
+    ghostBlocks.forEach(([x, y]) => {
+      if (y >= 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(x * CELL + 1, y * CELL + 1, CELL - 2, CELL - 2);
+      }
+    });
+    // current piece
+    current.blocks.forEach(([x, y]) => {
+      if (y >= 0) drawBlock(ctx, x, y, CELL, current.color);
+    });
+  }
+}
+
+function drawNext() {
+  nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+  if (!next) return;
+  const xs = next.blocks.map(b => b[0]);
+  const ys = next.blocks.map(b => b[1]);
+  const w = Math.max(...xs) - Math.min(...xs) + 1;
+  const h = Math.max(...ys) - Math.min(...ys) + 1;
+  const s = 22;
+  const ox = (nextCanvas.width - w * s) / 2 - Math.min(...xs) * s;
+  const oy = (nextCanvas.height - h * s) / 2 - Math.min(...ys) * s;
+  next.blocks.forEach(([x, y]) => {
+    nextCtx.fillStyle = next.color;
+    nextCtx.fillRect(ox + x * s + 1, oy + y * s + 1, s - 2, s - 2);
+  });
+}
+
+function gameLoop(ts) {
+  if (!started || gameOver) {
+    if (gameOver) {
+      draw();
+      const overlay = document.getElementById('overlay');
+      overlay.style.display = 'flex';
+      overlay.innerHTML = `<h2>GAME OVER</h2><p>Score: ${score}</p><p style="margin-top:8px;color:#888">Press SPACE to restart</p>`;
+    }
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+  if (ts - lastDrop > getDropInterval()) {
+    if (!move(0, 1)) lock();
+    lastDrop = ts;
+    updateUI();
+  }
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (!started || gameOver) {
+      if (gameOver) init();
+      started = true;
+      document.getElementById('overlay').style.display = 'none';
+      return;
+    }
+    hardDrop();
+    return;
+  }
+  if (!started || gameOver) return;
+  switch (e.code) {
+    case 'ArrowLeft':  move(-1, 0); break;
+    case 'ArrowRight': move(1, 0); break;
+    case 'ArrowDown':  if (move(0, 1)) score += 1; updateUI(); break;
+    case 'ArrowUp':    rotate(); break;
+  }
+  draw();
+});
+
+// Touch controls
+let touchStartX, touchStartY, touchTime;
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  touchStartX = t.clientX;
+  touchStartY = t.clientY;
+  touchTime = Date.now();
+});
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  if (!started || gameOver) {
+    if (gameOver) init();
+    started = true;
+    document.getElementById('overlay').style.display = 'none';
+    return;
+  }
+  const t = e.changedTouches[0];
+  const dx = t.clientX - touchStartX;
+  const dy = t.clientY - touchStartY;
+  const dt = Date.now() - touchTime;
+  if (dt < 200 && Math.abs(dx) < 20 && Math.abs(dy) < 20) {
+    rotate();
+  } else if (Math.abs(dx) > Math.abs(dy)) {
+    move(dx > 0 ? 1 : -1, 0);
+  } else if (dy > 30) {
+    hardDrop();
+  }
+  draw();
+});
+
+init();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

@@ -589,6 +589,65 @@ def cmd_append_history(args: argparse.Namespace) -> None:
 
 # ── turbo / rollback / history ────────────────────────────────
 
+
+def cmd_export(args: argparse.Namespace) -> None:
+    """Export cycle artifacts to a standalone directory."""
+    cfg = Config.load(Path(args.project_root))
+    cycle_dir = cfg.cycle_root_path / args.cycle_id
+    if not (cycle_dir / "meta.json").exists():
+        print(f"Cycle not found: {args.cycle_id}", file=sys.stderr)
+        sys.exit(1)
+    dest = Path(args.dest)
+
+    from .cycle import export_cycle
+    result = export_cycle(cfg, cycle_dir, dest)
+
+    if getattr(args, "json", False):
+        print(json.dumps(result, indent=2))
+        return
+
+    print(f"Exported {len(result['exported_files'])} artifact(s) to {result['dest']}")
+    for f in result["exported_files"]:
+        print(f"  {f}")
+    print(f"  devcycle.config.json (generated)")
+    print(f"\nTo continue iterating:")
+    print(f"  cd {result['dest']}")
+    print(f"  git init && git add -A && git commit -m 'initial'")
+    print(f"  devcycle turbo --title \"improve {result['title']}\"")
+
+
+def _publish_to_github(cfg, title: str, output) -> None:
+    """Create a GitHub repo from the project root and push."""
+    import re
+    import subprocess
+    root = cfg.project_root
+    # Slugify repo name from title
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", title).strip("-").lower()[:60]
+    if not slug:
+        slug = "devcycle-project"
+
+    try:
+        # Check if gh CLI is available
+        subprocess.run(["gh", "--version"], capture_output=True, check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        output("  [WARN] gh CLI not found — skipping GitHub publish")
+        return
+
+    try:
+        result = subprocess.run(
+            ["gh", "repo", "create", slug, "--public", "--source", str(root), "--push"],
+            capture_output=True, text=True, cwd=root, timeout=60,
+        )
+        if result.returncode == 0:
+            # Extract URL from output
+            url = result.stdout.strip()
+            output(f"  → GitHub repo created: {url}")
+        else:
+            output(f"  [WARN] GitHub publish failed: {result.stderr.strip()}")
+    except Exception as e:
+        output(f"  [WARN] GitHub publish error: {e}")
+
+
 def cmd_turbo(args: argparse.Namespace) -> None:
     from .turbo import run_turbo
     cfg = Config.load(Path(args.project_root))
@@ -600,13 +659,26 @@ def cmd_turbo(args: argparse.Namespace) -> None:
     spec_arg = getattr(args, "spec", None)
     lang_arg = getattr(args, "lang", None) or cfg.__dict__.get("default_language", "en")
     cycles_arg = getattr(args, "cycles", 1)
+    max_fix = getattr(args, "max_fix_rounds", 3)
+    continue_from = getattr(args, "continue_from", None)
+    github = getattr(args, "github", False)
+    # When --github is set, suppress normal push — we push after repo creation
+    if github:
+        push = False
     output = (lambda m: print(m, file=sys.stderr)) if is_json else (lambda m: print(m))
     result = run_turbo(cfg, args.title, push=push, non_interactive=ni,
                        dry_run=dry, spec_path=spec_arg, lang=lang_arg,
-                       cycles=cycles_arg, output_fn=output)
+                       cycles=cycles_arg, max_fix_rounds=max_fix,
+                       continue_from=continue_from,
+                       output_fn=output)
 
     if is_json:
         print(json.dumps(result, indent=2))
+
+    # GitHub repo creation — push happens here, after the repo exists
+    if github and result.get("committed") and not result.get("blocked"):
+        _publish_to_github(cfg, args.title, output)
+
     if result.get("blocked"):
         sys.exit(2)
 
@@ -839,7 +911,12 @@ def main() -> None:
     p.add_argument("--spec", default=None, help="Path to spec file (default: docs/spec.md)")
     p.add_argument("--lang", default=None, choices=["en", "ja"], help="Output language (default: en)")
     p.add_argument("--cycles", type=int, default=1, help="Number of cycles to run (default: 1)")
+    p.add_argument("--max-fix-rounds", type=int, default=3, help="Max fix+rereview rounds per cycle (default: 3)")
+    p.add_argument("--continue-from", default=None, metavar="CYCLE_ID",
+                    help="Continue from a previous cycle's artifacts")
     p.add_argument("--no-push", action="store_true", help="Commit and tag but skip push")
+    p.add_argument("--github", action="store_true",
+                    help="Create a GitHub repo and push the generated project")
     p.add_argument("--non-interactive", "-n", action="store_true",
                     help="Auto-advance where safe, block where input needed")
     p.add_argument("--dry-run", action="store_true", help="Show what would happen, don't execute")
@@ -1009,6 +1086,13 @@ def main() -> None:
              help="Append cycle entry to version history")
     _cycle_dir_arg(p)
     p.set_defaults(func=cmd_append_history)
+
+    p = _add(sub, ["export"],
+             help="Export cycle artifacts to a directory for standalone use")
+    p.add_argument("cycle_id", help="Cycle ID (folder name in ops/dev-cycles/)")
+    p.add_argument("dest", help="Destination directory")
+    _json_arg(p)
+    p.set_defaults(func=cmd_export)
 
     # ── Diagnostics ─────────────────────────────────────────
 
