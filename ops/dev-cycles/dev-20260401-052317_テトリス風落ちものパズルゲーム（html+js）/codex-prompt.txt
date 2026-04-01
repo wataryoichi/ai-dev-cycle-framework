@@ -1,0 +1,1 @@
+Review the changes for: テトリス風落ちものパズルゲーム（HTML+JS）. Focus on correctness, edge cases, and maintainability. Structure findings as High / Medium / Low severity.
