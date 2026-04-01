@@ -294,8 +294,46 @@ def _drive(
             codex_result = run_codex(cycle_dir, meta.get("title", ""), spec=codex_spec)
             if codex_result["success"] and codex_result["review_text"]:
                 output(f"  → Codex review auto-imported")
+
+                # Save previous findings before import for diff
+                pre_import_findings = count_findings(cycle_dir)
+
                 import_review(cycle_dir, codex_result["review_text"])
                 finalize_review(cfg, cycle_dir)
+
+                # Findings diff + stable detection
+                post_import_findings = count_findings(cycle_dir)
+                if fix_rounds > 0 and previous_findings:
+                    from .chain import diff_findings
+                    from .review_importer import parse_review
+                    import json as _json
+                    # Build diff from previous review vs current
+                    new_review = parse_review(codex_result["review_text"])
+                    fd = diff_findings(
+                        {"high": [], "medium": [], "low": []},  # simplified
+                        new_review,
+                    )
+                    fd["fix_round"] = fix_rounds
+                    fd["previous_total"] = previous_findings.get("total", 0)
+                    fd["current_total"] = post_import_findings["total"]
+                    (cycle_dir / "findings_diff.json").write_text(
+                        _json.dumps(fd, indent=2) + "\n"
+                    )
+                    output(f"  Findings: {post_import_findings['total']} (was {previous_findings.get('total', '?')})")
+
+                # Stable: no findings after a fix round
+                if fix_rounds > 0 and post_import_findings["total"] == 0:
+                    from .chain import STOPPED_STABLE
+                    output(f"  → Stable — no findings after fix round {fix_rounds}")
+                    _record_transition(cycle_dir, state, State.COMPLETED, "stable")
+                    result.history.append({"from": state.value, "action": "stable"})
+                    # Finalize
+                    try:
+                        finalize_cycle(cfg, cycle_dir)
+                    except Exception:
+                        pass
+                    continue
+
                 _record_transition(cycle_dir, state, State.FOLLOWUP_NEEDED, "auto_codex")
                 result.history.append({"from": state.value, "action": "auto_codex"})
                 continue

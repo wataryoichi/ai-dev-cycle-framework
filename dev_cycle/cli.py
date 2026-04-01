@@ -600,10 +600,12 @@ def cmd_turbo(args: argparse.Namespace) -> None:
     spec_arg = getattr(args, "spec", None)
     lang_arg = getattr(args, "lang", None) or cfg.__dict__.get("default_language", "en")
     cycles_arg = getattr(args, "cycles", 1)
+    max_fix = getattr(args, "max_fix_rounds", 3)
     output = (lambda m: print(m, file=sys.stderr)) if is_json else (lambda m: print(m))
     result = run_turbo(cfg, args.title, push=push, non_interactive=ni,
                        dry_run=dry, spec_path=spec_arg, lang=lang_arg,
-                       cycles=cycles_arg, output_fn=output)
+                       cycles=cycles_arg, max_fix_rounds=max_fix,
+                       output_fn=output)
 
     if is_json:
         print(json.dumps(result, indent=2))
@@ -839,6 +841,7 @@ def main() -> None:
     p.add_argument("--spec", default=None, help="Path to spec file (default: docs/spec.md)")
     p.add_argument("--lang", default=None, choices=["en", "ja"], help="Output language (default: en)")
     p.add_argument("--cycles", type=int, default=1, help="Number of cycles to run (default: 1)")
+    p.add_argument("--max-fix-rounds", type=int, default=3, help="Max fix+rereview rounds per cycle (default: 3)")
     p.add_argument("--no-push", action="store_true", help="Commit and tag but skip push")
     p.add_argument("--non-interactive", "-n", action="store_true",
                     help="Auto-advance where safe, block where input needed")
