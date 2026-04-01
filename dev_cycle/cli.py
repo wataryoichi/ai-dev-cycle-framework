@@ -589,6 +589,39 @@ def cmd_append_history(args: argparse.Namespace) -> None:
 
 # ── turbo / rollback / history ────────────────────────────────
 
+
+def _publish_to_github(cfg, title: str, output) -> None:
+    """Create a GitHub repo from the project root and push."""
+    import re
+    import subprocess
+    root = cfg.project_root
+    # Slugify repo name from title
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", title).strip("-").lower()[:60]
+    if not slug:
+        slug = "devcycle-project"
+
+    try:
+        # Check if gh CLI is available
+        subprocess.run(["gh", "--version"], capture_output=True, check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        output("  [WARN] gh CLI not found — skipping GitHub publish")
+        return
+
+    try:
+        result = subprocess.run(
+            ["gh", "repo", "create", slug, "--public", "--source", str(root), "--push"],
+            capture_output=True, text=True, cwd=root, timeout=60,
+        )
+        if result.returncode == 0:
+            # Extract URL from output
+            url = result.stdout.strip()
+            output(f"  → GitHub repo created: {url}")
+        else:
+            output(f"  [WARN] GitHub publish failed: {result.stderr.strip()}")
+    except Exception as e:
+        output(f"  [WARN] GitHub publish error: {e}")
+
+
 def cmd_turbo(args: argparse.Namespace) -> None:
     from .turbo import run_turbo
     cfg = Config.load(Path(args.project_root))
@@ -601,6 +634,7 @@ def cmd_turbo(args: argparse.Namespace) -> None:
     lang_arg = getattr(args, "lang", None) or cfg.__dict__.get("default_language", "en")
     cycles_arg = getattr(args, "cycles", 1)
     max_fix = getattr(args, "max_fix_rounds", 3)
+    github = getattr(args, "github", False)
     output = (lambda m: print(m, file=sys.stderr)) if is_json else (lambda m: print(m))
     result = run_turbo(cfg, args.title, push=push, non_interactive=ni,
                        dry_run=dry, spec_path=spec_arg, lang=lang_arg,
@@ -609,6 +643,11 @@ def cmd_turbo(args: argparse.Namespace) -> None:
 
     if is_json:
         print(json.dumps(result, indent=2))
+
+    # GitHub repo creation
+    if github and result.get("committed") and not result.get("blocked"):
+        _publish_to_github(cfg, args.title, output)
+
     if result.get("blocked"):
         sys.exit(2)
 
@@ -843,6 +882,8 @@ def main() -> None:
     p.add_argument("--cycles", type=int, default=1, help="Number of cycles to run (default: 1)")
     p.add_argument("--max-fix-rounds", type=int, default=3, help="Max fix+rereview rounds per cycle (default: 3)")
     p.add_argument("--no-push", action="store_true", help="Commit and tag but skip push")
+    p.add_argument("--github", action="store_true",
+                    help="Create a GitHub repo and push the generated project")
     p.add_argument("--non-interactive", "-n", action="store_true",
                     help="Auto-advance where safe, block where input needed")
     p.add_argument("--dry-run", action="store_true", help="Show what would happen, don't execute")

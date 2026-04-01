@@ -206,6 +206,12 @@ def run_turbo(
         orch_result = _drive(cfg, cycle_dir, input_fn, output, non_interactive, max_fix_rounds)
         state = orch_result.state
 
+        # Generate README at project root
+        from .orchestrator import _generate_readme
+        readme_path = _generate_readme(cycle_dir, root)
+        if readme_path:
+            output(f"  → README.md generated")
+
         # Git afterburner
         commit_result = {"committed": False, "tagged": False, "sha": "", "tag": ""}
         commit_msg = f"devcycle(turbo): {title} [{version}] state:{state.value}"
