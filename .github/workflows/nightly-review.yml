@@ -1,0 +1,128 @@
+name: Nightly AI Review
+
+on:
+  schedule:
+    - cron: '0 19 * * 1-5'  # 4am JST weekdays (19:00 UTC)
+  workflow_dispatch:
+    inputs:
+      title:
+        description: 'Review title'
+        default: 'nightly review'
+      cycles:
+        description: 'Number of cycles'
+        default: '1'
+      max_fix_rounds:
+        description: 'Max fix rounds per cycle'
+        default: '2'
+      lang:
+        description: 'Output language'
+        default: 'en'
+        type: choice
+        options: [en, ja]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install devcycle
+        run: pip install -e .
+
+      - name: Verify environment
+        run: devcycle doctor || true
+
+      - name: Run review cycle
+        id: review
+        run: |
+          TITLE="${{ github.event.inputs.title || 'nightly review' }}"
+          CYCLES="${{ github.event.inputs.cycles || '1' }}"
+          MAX_FIX="${{ github.event.inputs.max_fix_rounds || '2' }}"
+          LANG="${{ github.event.inputs.lang || 'en' }}"
+          DATE=$(date +%Y-%m-%d)
+
+          devcycle turbo \
+            --title "${TITLE} ${DATE}" \
+            --cycles "$CYCLES" \
+            --max-fix-rounds "$MAX_FIX" \
+            --lang "$LANG" \
+            --no-push \
+            --json > result.json 2>turbo-stderr.txt || true
+
+          # Extract key fields for summary
+          python3 -c "
+          import json, sys
+          try:
+              r = json.load(open('result.json'))
+          except Exception:
+              print('state=error', file=sys.stderr)
+              sys.exit(0)
+          print(f\"state={r.get('state', 'unknown')}\")
+          print(f\"stopped={r.get('stopped_reason', 'unknown')}\")
+          print(f\"cycles={r.get('executed_cycles', 0)}\")
+          print(f\"blocked={r.get('blocked', False)}\")
+          " >> "$GITHUB_OUTPUT"
+        env:
+          DEVCYCLE_CLAUDE_CMD: ${{ secrets.DEVCYCLE_CLAUDE_CMD }}
+          DEVCYCLE_CODEX_CMD: ${{ secrets.DEVCYCLE_CODEX_CMD }}
+
+      - name: Generate summary
+        if: always()
+        run: |
+          echo "## Nightly AI Review" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| State | \`${{ steps.review.outputs.state }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Stopped | \`${{ steps.review.outputs.stopped }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cycles | ${{ steps.review.outputs.cycles }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Blocked | ${{ steps.review.outputs.blocked }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f result.json ]; then
+            echo "<details><summary>Full result</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```json' >> $GITHUB_STEP_SUMMARY
+            cat result.json >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Include run summary if exists
+          if [ -f ops/dev-cycles/run_summary.md ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details><summary>Run summary</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            cat ops/dev-cycles/run_summary.md >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: devcycle-report-${{ github.run_number }}
+          path: |
+            ops/dev-cycles/
+            result.json
+            turbo-stderr.txt
+          retention-days: 30
+
+      - name: Commit results
+        if: steps.review.outputs.state != 'error' && steps.review.outputs.state != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ops/dev-cycles/
+          git diff --cached --quiet || git commit -m "chore(nightly): AI review $(date +%Y-%m-%d) [skip ci]"
+          git push
