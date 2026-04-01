@@ -15,10 +15,16 @@ STOPPED_MAX_CYCLES = "max_cycles_reached"
 STOPPED_STABLE = "stable"
 STOPPED_COMPLETED = "completed"
 STOPPED_NO_PROGRESS = "no_progress"
+STOPPED_CLAUDE_TIMEOUT = "claude_timeout"
+STOPPED_CODEX_TIMEOUT = "codex_timeout"
+STOPPED_RUNNER_ERROR = "runner_error"
+STOPPED_MAX_FIX_ROUNDS = "max_fix_rounds_reached"
 
 ALL_STOPPED_REASONS = [
     STOPPED_BLOCKED, STOPPED_NEEDS_INPUT, STOPPED_MAX_CYCLES,
     STOPPED_STABLE, STOPPED_COMPLETED, STOPPED_NO_PROGRESS,
+    STOPPED_CLAUDE_TIMEOUT, STOPPED_CODEX_TIMEOUT, STOPPED_RUNNER_ERROR,
+    STOPPED_MAX_FIX_ROUNDS,
 ]
 
 
@@ -113,3 +119,95 @@ def write_chain_summary(
 def save_prompt_artifact(cycle_dir: Path, runner: str, prompt: str) -> None:
     """Save the prompt sent to a runner for debug/audit."""
     (cycle_dir / f"{runner}-prompt.txt").write_text(prompt)
+
+
+def save_stderr_artifact(cycle_dir: Path, runner: str, stderr: str) -> None:
+    """Save stderr from a runner for debugging."""
+    if stderr and stderr.strip():
+        (cycle_dir / f"{runner}-stderr.txt").write_text(stderr)
+
+
+def build_fix_plan(cycle_dir: Path) -> dict:
+    """Build a structured fix plan from review findings and followup."""
+    plan = {"actions": [], "finding_count": 0}
+
+    review_path = cycle_dir / "review.json"
+    if review_path.exists():
+        try:
+            review = json.loads(review_path.read_text())
+        except Exception:
+            review = {}
+    else:
+        # Try codex-review.md parsing
+        from .review_importer import parse_review
+        cr = cycle_dir / "codex-review.md"
+        review = parse_review(cr.read_text()) if cr.exists() else {}
+
+    for severity in ("high", "medium", "low"):
+        for finding in review.get(severity, []):
+            if finding and finding != "(none)":
+                plan["actions"].append({
+                    "severity": severity,
+                    "finding": finding,
+                    "action_type": "fix",
+                    "status": "pending",
+                })
+                plan["finding_count"] += 1
+
+    # Save
+    (cycle_dir / "fix_plan.json").write_text(json.dumps(plan, indent=2) + "\n")
+    return plan
+
+
+def diff_findings(previous: dict, current: dict) -> dict:
+    """Compare two review dicts and produce a diff."""
+    prev_all = set()
+    curr_all = set()
+    for sev in ("high", "medium", "low"):
+        for f in previous.get(sev, []):
+            if f and f != "(none)":
+                prev_all.add(f)
+        for f in current.get(sev, []):
+            if f and f != "(none)":
+                curr_all.add(f)
+
+    resolved = prev_all - curr_all
+    new_findings = curr_all - prev_all
+    unchanged = prev_all & curr_all
+
+    result = {
+        "resolved": list(resolved),
+        "new": list(new_findings),
+        "unchanged": list(unchanged),
+        "previous_count": len(prev_all),
+        "current_count": len(curr_all),
+        "improved": len(curr_all) < len(prev_all),
+        "no_progress": prev_all == curr_all,
+    }
+    return result
+
+
+def build_fix_prompt(cycle_dir: Path, fix_plan: dict, spec: dict | None = None) -> str:
+    """Build a prompt for Claude to fix the identified issues."""
+    parts = ["Fix the following issues found during code review:\n"]
+
+    for action in fix_plan.get("actions", []):
+        parts.append(f"- [{action['severity'].upper()}] {action['finding']}")
+
+    parts.append("\nRules:")
+    parts.append("- Fix only the identified issues")
+    parts.append("- Do not change unrelated code")
+    parts.append("- Preserve existing passing behavior")
+
+    if spec and spec.get("present"):
+        if spec.get("constraints"):
+            parts.append("\nSpec constraints to maintain:")
+            for c in spec["constraints"][:5]:
+                parts.append(f"  - {c}")
+        if spec.get("acceptance_criteria"):
+            parts.append("\nAcceptance criteria that must still pass:")
+            for ac in spec["acceptance_criteria"][:5]:
+                parts.append(f"  - {ac}")
+
+    parts.append("\nAfter fixing, update claude-implementation-summary.md.")
+    return "\n".join(parts)

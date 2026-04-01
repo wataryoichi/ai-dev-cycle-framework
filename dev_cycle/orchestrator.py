@@ -167,6 +167,7 @@ def _drive(
     input_fn: InputFn | None,
     output: OutputFn,
     non_interactive: bool = False,
+    max_fix_rounds: int = 3,
 ) -> RunResult:
     """Drive the state machine loop."""
     meta = _read_meta(cycle_dir)
@@ -176,6 +177,8 @@ def _drive(
         state=determine_state(cycle_dir),
     )
     inp = input_fn or _default_input
+    fix_rounds = 0
+    previous_findings = None
 
     while True:
         state = determine_state(cycle_dir)
@@ -221,7 +224,66 @@ def _drive(
                 continue
             elif not claude_result["blocked"]:
                 output(f"  Claude runner failed: {claude_result['reason']}")
+            # Save stderr if present
+            if claude_result.get("stderr"):
+                from .chain import save_stderr_artifact
+                save_stderr_artifact(cycle_dir, "claude", claude_result["stderr"])
             # If blocked or failed, fall through to interactive/non-interactive
+
+        # Try auto-fix at FIX_NEEDED state
+        if state == State.FIX_NEEDED:
+            from .ai_runner import run_claude, get_claude_cmd
+            from .chain import build_fix_plan, build_fix_prompt, save_stderr_artifact, diff_findings, STOPPED_MAX_FIX_ROUNDS, STOPPED_NO_PROGRESS
+            from .spec_reader import load_spec_from_meta
+
+            # Check fix round limit
+            if fix_rounds >= max_fix_rounds:
+                output(f"  Max fix rounds ({max_fix_rounds}) reached")
+                result.blocked = True
+                result.blocked_reason = STOPPED_MAX_FIX_ROUNDS
+                result.interrupted = True
+                break
+
+            # Check no-progress
+            current_findings = count_findings(cycle_dir)
+            if previous_findings and current_findings == previous_findings:
+                output(f"  No progress — same findings after fix")
+                result.blocked = True
+                result.blocked_reason = STOPPED_NO_PROGRESS
+                result.interrupted = True
+                break
+            previous_findings = current_findings
+
+            if get_claude_cmd():
+                meta = _read_meta(cycle_dir)
+                spec = load_spec_from_meta(cycle_dir)
+                fix_plan = build_fix_plan(cycle_dir)
+                if fix_plan["finding_count"] > 0:
+                    fix_prompt = build_fix_prompt(cycle_dir, fix_plan, spec)
+                    from .chain import save_prompt_artifact
+                    save_prompt_artifact(cycle_dir, "claude-fix", fix_prompt)
+                    output(f"  → Auto-fixing {fix_plan['finding_count']} finding(s)...")
+                    fix_result = run_claude(cycle_dir, meta.get("title", ""),
+                                           goal="Fix review findings", spec=spec)
+                    if fix_result.get("stderr"):
+                        save_stderr_artifact(cycle_dir, "claude-fix", fix_result["stderr"])
+                    if fix_result["success"]:
+                        output(f"  → Fix applied")
+                        impl_text = fix_result.get("output", "")[:2000]
+                        if impl_text:
+                            from .dual_output import write_implementation_summary
+                            write_implementation_summary(
+                                cycle_dir,
+                                title=f"Fix: {meta.get('title', '')}",
+                                summary=impl_text,
+                                spec_path=meta.get("spec_path", ""),
+                            )
+                        # Trigger rereview
+                        fix_rounds += 1
+                        prepare_review(cfg, cycle_dir)
+                        _record_transition(cycle_dir, state, State.REVIEW_PENDING, "auto_fix")
+                        result.history.append({"from": state.value, "action": "auto_fix", "fix_round": fix_rounds})
+                        continue
 
         # Try Codex runner at review_pending BEFORE non-interactive block
         if state == State.REVIEW_PENDING:
