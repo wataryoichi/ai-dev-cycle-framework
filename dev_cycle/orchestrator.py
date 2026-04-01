@@ -204,7 +204,15 @@ def _auto_fill_final_summary(cycle_dir: Path) -> None:
 
 
 def _generate_readme(cycle_dir: Path, project_root: Path) -> Path | None:
-    """Generate a README.md at the project root from cycle artifacts."""
+    """Generate a README.md at the project root from cycle artifacts.
+
+    Only creates the file if it does not already exist, to avoid
+    overwriting user-curated documentation.
+    """
+    readme_path = project_root / "README.md"
+    if readme_path.exists():
+        return None  # never overwrite an existing README
+
     impl_path = cycle_dir / "claude-implementation-summary.md"
     if not impl_path.exists():
         return None
@@ -218,7 +226,6 @@ def _generate_readme(cycle_dir: Path, project_root: Path) -> Path | None:
     done_match = re.search(r"## What Was Done\s*\n(.*?)(?=\n##|\Z)", impl_text, re.DOTALL)
     description = done_match.group(1).strip() if done_match else ""
 
-    readme_path = project_root / "README.md"
     lines = [
         f"# {title}",
         "",
@@ -270,7 +277,7 @@ def _drive(
     )
     inp = input_fn or _default_input
     fix_rounds = 0
-    previous_findings = None
+    previous_review_text = None  # raw review text for no-progress comparison
 
     while True:
         state = determine_state(cycle_dir)
@@ -385,23 +392,34 @@ def _drive(
 
                 # Findings diff + stable detection
                 post_import_findings = count_findings(cycle_dir)
-                if fix_rounds > 0 and previous_findings:
-                    from .chain import diff_findings
+                current_review_text = codex_result["review_text"]
+
+                if fix_rounds > 0:
                     from .review_importer import parse_review
                     import json as _json
-                    # Build diff from previous review vs current
-                    new_review = parse_review(codex_result["review_text"])
+
+                    prev_counts = count_findings(cycle_dir) if not previous_review_text else None
+                    if previous_review_text:
+                        prev_parsed = parse_review(previous_review_text)
+                        prev_total = sum(len(v) for v in prev_parsed.values() if isinstance(v, list))
+                    else:
+                        prev_total = 0
+
+                    output(f"  Findings: {post_import_findings['total']} (was {prev_total})")
+
+                    # Write findings diff artifact
+                    from .chain import diff_findings
+                    new_parsed = parse_review(current_review_text)
                     fd = diff_findings(
-                        {"high": [], "medium": [], "low": []},  # simplified
-                        new_review,
+                        {"high": [], "medium": [], "low": []},
+                        new_parsed,
                     )
                     fd["fix_round"] = fix_rounds
-                    fd["previous_total"] = previous_findings.get("total", 0)
+                    fd["previous_total"] = prev_total
                     fd["current_total"] = post_import_findings["total"]
                     (cycle_dir / "findings_diff.json").write_text(
                         _json.dumps(fd, indent=2) + "\n"
                     )
-                    output(f"  Findings: {post_import_findings['total']} (was {previous_findings.get('total', '?')})")
 
                 # Stable: no findings after a fix round
                 if fix_rounds > 0 and post_import_findings["total"] == 0:
@@ -416,8 +434,8 @@ def _drive(
                         pass
                     continue
 
-                # No-progress: same findings after fix+rereview means fix didn't help
-                if fix_rounds > 0 and previous_findings and post_import_findings == previous_findings:
+                # No-progress: compare actual review text, not just counts
+                if fix_rounds > 0 and previous_review_text and current_review_text.strip() == previous_review_text.strip():
                     from .chain import STOPPED_NO_PROGRESS
                     output(f"  No progress — same findings after fix round {fix_rounds}")
                     result.blocked = True
@@ -425,8 +443,8 @@ def _drive(
                     result.interrupted = True
                     break
 
-                # Track findings for next round's no-progress check
-                previous_findings = post_import_findings
+                # Track review text for next round's no-progress check
+                previous_review_text = current_review_text
 
                 _record_transition(cycle_dir, state, State.FOLLOWUP_NEEDED, "auto_codex")
                 result.history.append({"from": state.value, "action": "auto_codex"})

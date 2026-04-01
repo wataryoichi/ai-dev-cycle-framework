@@ -662,6 +662,9 @@ def cmd_turbo(args: argparse.Namespace) -> None:
     max_fix = getattr(args, "max_fix_rounds", 3)
     continue_from = getattr(args, "continue_from", None)
     github = getattr(args, "github", False)
+    # When --github is set, suppress normal push — we push after repo creation
+    if github:
+        push = False
     output = (lambda m: print(m, file=sys.stderr)) if is_json else (lambda m: print(m))
     result = run_turbo(cfg, args.title, push=push, non_interactive=ni,
                        dry_run=dry, spec_path=spec_arg, lang=lang_arg,
@@ -672,7 +675,7 @@ def cmd_turbo(args: argparse.Namespace) -> None:
     if is_json:
         print(json.dumps(result, indent=2))
 
-    # GitHub repo creation
+    # GitHub repo creation — push happens here, after the repo exists
     if github and result.get("committed") and not result.get("blocked"):
         _publish_to_github(cfg, args.title, output)
 
