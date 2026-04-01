@@ -23,3 +23,9 @@ Real Codex review auto-import verified (codex-cli v0.117.0 / gpt-5.4).
 Prompt artifacts saved. Carry-forward in Claude prompts.
 Orchestrator fixes for non-interactive + COMPLETED state.
 DEVCYCLE_CODEX_CMD="codex review" as standard setup. 244 tests.
+
+### v0.8.0 — Auto-fix Loop
+Auto-fix: finding → Claude fix → Codex rereview → no-progress detection.
+Fix plan (JSON), prompt artifacts, stderr capture.
+Stopped reasons: max_fix_rounds, no_progress, runner timeouts.
+Release checklist added. 244 tests.

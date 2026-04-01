@@ -135,6 +135,7 @@ def run_turbo(
     spec_path: str | None = None,
     lang: str = "en",
     cycles: int = 1,
+    max_fix_rounds: int = 3,
     input_fn=None,
     output_fn=None,
 ) -> dict:
@@ -202,7 +203,7 @@ def run_turbo(
             })
             break
 
-        orch_result = _drive(cfg, cycle_dir, input_fn, output, non_interactive)
+        orch_result = _drive(cfg, cycle_dir, input_fn, output, non_interactive, max_fix_rounds)
         state = orch_result.state
 
         # Git afterburner
