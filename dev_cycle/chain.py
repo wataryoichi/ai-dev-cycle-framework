@@ -1,4 +1,4 @@
-"""Multi-cycle chain helpers — carry-forward and chain summary."""
+"""Multi-cycle chain helpers — carry-forward, chain summary, stopped reasons."""
 
 from __future__ import annotations
 
@@ -6,6 +6,20 @@ import json
 from pathlib import Path
 
 from .i18n import get_labels
+
+# ── Stopped reason constants ─────────────────────────────────
+
+STOPPED_BLOCKED = "blocked"
+STOPPED_NEEDS_INPUT = "needs_input"
+STOPPED_MAX_CYCLES = "max_cycles_reached"
+STOPPED_STABLE = "stable"
+STOPPED_COMPLETED = "completed"
+STOPPED_NO_PROGRESS = "no_progress"
+
+ALL_STOPPED_REASONS = [
+    STOPPED_BLOCKED, STOPPED_NEEDS_INPUT, STOPPED_MAX_CYCLES,
+    STOPPED_STABLE, STOPPED_COMPLETED, STOPPED_NO_PROGRESS,
+]
 
 
 def build_carry_forward(previous_cycle_dir: Path) -> dict:
@@ -94,3 +108,8 @@ def write_chain_summary(
         md += "\n"
 
     (output_dir / "run_summary.md").write_text(md)
+
+
+def save_prompt_artifact(cycle_dir: Path, runner: str, prompt: str) -> None:
+    """Save the prompt sent to a runner for debug/audit."""
+    (cycle_dir / f"{runner}-prompt.txt").write_text(prompt)

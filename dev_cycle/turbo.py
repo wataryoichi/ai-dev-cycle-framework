@@ -149,13 +149,16 @@ def run_turbo(
     spec_file = find_spec(root, spec_path)
     spec = read_spec(spec_file) if spec_file else empty_spec()
 
-    from .chain import build_carry_forward, write_chain_summary
+    from .chain import (
+        build_carry_forward, write_chain_summary,
+        STOPPED_BLOCKED, STOPPED_MAX_CYCLES, STOPPED_COMPLETED,
+    )
 
     all_cycles = []
     prev_cycle_id = ""
     prev_cycle_dir = None
     root_cycle_id = ""
-    stopped_reason = "max_cycles_reached"
+    stopped_reason = STOPPED_MAX_CYCLES
 
     for iteration in range(cycles):
         import time
@@ -232,10 +235,10 @@ def run_turbo(
 
         # Stop conditions
         if orch_result.blocked or orch_result.interrupted:
-            stopped_reason = "blocked" if orch_result.blocked else "interrupted"
+            stopped_reason = STOPPED_BLOCKED
             break
         if state == State.COMPLETED:
-            stopped_reason = "completed" if iteration == cycles - 1 else "max_cycles_reached"
+            stopped_reason = STOPPED_COMPLETED
             continue
 
     # Write chain summary if multi-cycle

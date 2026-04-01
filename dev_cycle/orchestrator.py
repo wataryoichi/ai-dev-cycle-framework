@@ -177,9 +177,11 @@ def _drive(
     )
     inp = input_fn or _default_input
 
-    while result.state != State.COMPLETED:
+    while True:
         state = determine_state(cycle_dir)
         result.state = state
+        if state == State.COMPLETED:
+            break
 
         # Try auto transition
         auto = get_auto_transition(state)
@@ -199,7 +201,9 @@ def _drive(
             from .spec_reader import load_spec_from_meta
             meta = _read_meta(cycle_dir)
             spec = load_spec_from_meta(cycle_dir)
-            claude_result = run_claude(cycle_dir, meta.get("title", ""), spec=spec)
+            carry = meta.get("carry_forward")
+            claude_result = run_claude(cycle_dir, meta.get("title", ""), spec=spec,
+                                       carry_forward=carry)
             if claude_result["success"]:
                 output(f"  → Claude implementation complete")
                 impl_text = claude_result.get("output", "")[:2000]
@@ -218,6 +222,21 @@ def _drive(
             elif not claude_result["blocked"]:
                 output(f"  Claude runner failed: {claude_result['reason']}")
             # If blocked or failed, fall through to interactive/non-interactive
+
+        # Try Codex runner at review_pending BEFORE non-interactive block
+        if state == State.REVIEW_PENDING:
+            from .ai_runner import run_codex
+            from .spec_reader import load_spec_from_meta
+            meta = _read_meta(cycle_dir)
+            codex_spec = load_spec_from_meta(cycle_dir)
+            codex_result = run_codex(cycle_dir, meta.get("title", ""), spec=codex_spec)
+            if codex_result["success"] and codex_result["review_text"]:
+                output(f"  → Codex review auto-imported")
+                import_review(cycle_dir, codex_result["review_text"])
+                finalize_review(cfg, cycle_dir)
+                _record_transition(cycle_dir, state, State.FOLLOWUP_NEEDED, "auto_codex")
+                result.history.append({"from": state.value, "action": "auto_codex"})
+                continue
 
         # Non-interactive: use default action or block
         if non_interactive:
