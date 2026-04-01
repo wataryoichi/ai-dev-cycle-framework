@@ -167,7 +167,17 @@ def _now_iso() -> str:
 
 
 def _cycle_id(version: str, title: str) -> str:
-    slug = title.lower().replace(" ", "-")[:40]
+    import hashlib as _hl
+    import re as _re
+    import unicodedata as _ud
+    # Transliterate to ASCII-safe slug: drop non-ascii, collapse separators
+    nfkd = _ud.normalize("NFKD", title)
+    ascii_only = nfkd.encode("ascii", "ignore").decode("ascii")
+    slug = _re.sub(r"[^a-zA-Z0-9]+", "-", ascii_only).strip("-").lower()[:40]
+    if len(slug) < 8:
+        # Title is mostly non-ASCII — use short hash for traceability
+        h = _hl.sha1(title.encode()).hexdigest()[:8]
+        slug = f"{slug}-{h}" if slug else h
     # If version already contains a timestamp (turbo mode), skip adding another
     if version.startswith("dev-") and len(version) > 10:
         return f"{version}_{slug}"
