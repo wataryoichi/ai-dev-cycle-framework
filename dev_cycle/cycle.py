@@ -268,6 +268,8 @@ def start_cycle(cfg: Config, version: str, title: str, spec: dict | None = None,
     # Dual output: Markdown + JSON for request (includes spec if present)
     from .dual_output import write_request
     goal = spec.get("summary", "")[:200] if spec and spec.get("present") else ""
+    if not goal:
+        goal = title
     write_request(cycle_dir, title, version, goal=goal, spec=spec, lang=lang)
 
     # Cycle state JSON

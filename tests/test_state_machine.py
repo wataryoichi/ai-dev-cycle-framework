@@ -20,9 +20,10 @@ from dev_cycle.state_machine import (
 
 
 class TestDetermineState:
-    def test_fresh_cycle_is_started(self, cfg: Config) -> None:
+    def test_fresh_cycle_with_title_is_implementing(self, cfg: Config) -> None:
         d = start_cycle(cfg, "v1.0.0", "test")
-        assert determine_state(d) == State.STARTED
+        # Title is used as goal fallback, so fresh cycle goes straight to implementing
+        assert determine_state(d) == State.IMPLEMENTING
 
     def test_with_filled_request_is_implementing(self, cfg: Config) -> None:
         d = start_cycle(cfg, "v1.0.0", "test")
