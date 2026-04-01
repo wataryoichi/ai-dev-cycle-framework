@@ -244,16 +244,6 @@ def _drive(
                 result.interrupted = True
                 break
 
-            # Check no-progress
-            current_findings = count_findings(cycle_dir)
-            if previous_findings and current_findings == previous_findings:
-                output(f"  No progress — same findings after fix")
-                result.blocked = True
-                result.blocked_reason = STOPPED_NO_PROGRESS
-                result.interrupted = True
-                break
-            previous_findings = current_findings
-
             if get_claude_cmd():
                 meta = _read_meta(cycle_dir)
                 spec = load_spec_from_meta(cycle_dir)
@@ -327,12 +317,23 @@ def _drive(
                     output(f"  → Stable — no findings after fix round {fix_rounds}")
                     _record_transition(cycle_dir, state, State.COMPLETED, "stable")
                     result.history.append({"from": state.value, "action": "stable"})
-                    # Finalize
                     try:
                         finalize_cycle(cfg, cycle_dir)
                     except Exception:
                         pass
                     continue
+
+                # No-progress: same findings after fix+rereview means fix didn't help
+                if fix_rounds > 0 and previous_findings and post_import_findings == previous_findings:
+                    from .chain import STOPPED_NO_PROGRESS
+                    output(f"  No progress — same findings after fix round {fix_rounds}")
+                    result.blocked = True
+                    result.blocked_reason = STOPPED_NO_PROGRESS
+                    result.interrupted = True
+                    break
+
+                # Track findings for next round's no-progress check
+                previous_findings = post_import_findings
 
                 _record_transition(cycle_dir, state, State.FOLLOWUP_NEEDED, "auto_codex")
                 result.history.append({"from": state.value, "action": "auto_codex"})
