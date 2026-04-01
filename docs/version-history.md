@@ -14,4 +14,12 @@ Spec contract formalized. Turbo + Guided unified on spec.
 
 ### v0.5.0 — Multi-cycle + i18n
 Multi-cycle execution (`--cycles N`). Japanese/English output (`--lang ja`).
-Context carry-forward between cycles. 226 tests.
+
+### v0.6.0 — Chain + Locale-hardening
+Chain summary, carry-forward, locale alias helpers, section detection fixes.
+
+### v0.7.0 — Codex Auto-import
+Real Codex review auto-import verified (codex-cli v0.117.0 / gpt-5.4).
+Prompt artifacts saved. Carry-forward in Claude prompts.
+Orchestrator fixes for non-interactive + COMPLETED state.
+DEVCYCLE_CODEX_CMD="codex review" as standard setup. 244 tests.
