@@ -32,8 +32,6 @@ jobs:
       - name: Run review
         id: review
         run: |
-          PR_TITLE="${{ github.event.pull_request.title }}"
-
           devcycle turbo \
             --title "PR review: ${PR_TITLE}" \
             --cycles 1 \
@@ -45,6 +43,7 @@ jobs:
           STATE=$(python3 -c "import json; print(json.load(open('result.json')).get('state','error'))" 2>/dev/null || echo "error")
           echo "state=${STATE}" >> "$GITHUB_OUTPUT"
         env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
           DEVCYCLE_CLAUDE_CMD: ${{ secrets.DEVCYCLE_CLAUDE_CMD }}
           DEVCYCLE_CODEX_CMD: ${{ secrets.DEVCYCLE_CODEX_CMD }}
 

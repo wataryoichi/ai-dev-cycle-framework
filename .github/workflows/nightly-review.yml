@@ -45,10 +45,10 @@ jobs:
       - name: Run review cycle
         id: review
         run: |
-          TITLE="${{ github.event.inputs.title || 'nightly review' }}"
-          CYCLES="${{ github.event.inputs.cycles || '1' }}"
-          MAX_FIX="${{ github.event.inputs.max_fix_rounds || '2' }}"
-          LANG="${{ github.event.inputs.lang || 'en' }}"
+          TITLE="${INPUT_TITLE:-nightly review}"
+          CYCLES="${INPUT_CYCLES:-1}"
+          MAX_FIX="${INPUT_MAX_FIX:-2}"
+          LANG="${INPUT_LANG:-en}"
           DATE=$(date +%Y-%m-%d)
 
           devcycle turbo \
@@ -73,6 +73,10 @@ jobs:
           print(f\"blocked={r.get('blocked', False)}\")
           " >> "$GITHUB_OUTPUT"
         env:
+          INPUT_TITLE: ${{ github.event.inputs.title }}
+          INPUT_CYCLES: ${{ github.event.inputs.cycles }}
+          INPUT_MAX_FIX: ${{ github.event.inputs.max_fix_rounds }}
+          INPUT_LANG: ${{ github.event.inputs.lang }}
           DEVCYCLE_CLAUDE_CMD: ${{ secrets.DEVCYCLE_CLAUDE_CMD }}
           DEVCYCLE_CODEX_CMD: ${{ secrets.DEVCYCLE_CODEX_CMD }}
 
