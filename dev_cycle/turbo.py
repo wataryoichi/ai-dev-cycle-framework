@@ -136,6 +136,7 @@ def run_turbo(
     lang: str = "en",
     cycles: int = 1,
     max_fix_rounds: int = 3,
+    continue_from: str | None = None,
     input_fn=None,
     output_fn=None,
 ) -> dict:
@@ -160,6 +161,15 @@ def run_turbo(
     prev_cycle_dir = None
     root_cycle_id = ""
     stopped_reason = STOPPED_MAX_CYCLES
+
+    # Seed from a previous cycle if --continue-from was given
+    if continue_from:
+        cf_dir = cfg.cycle_root_path / continue_from
+        if not (cf_dir / "meta.json").exists():
+            raise FileNotFoundError(f"Cycle not found: {continue_from}")
+        prev_cycle_id = continue_from
+        prev_cycle_dir = cf_dir
+        output(f"  Continuing from: {continue_from}")
 
     for iteration in range(cycles):
         import time

@@ -520,3 +520,65 @@ def get_cycle_phase(cycle_dir: Path) -> str:
     if "phase" in meta:
         return meta["phase"]
     return meta.get("status", "started")
+
+
+# ── Export helpers ──────────────────────────────────────────
+
+_META_FILES = {
+    "meta.json", "cycle_state.json", "request.md", "request.json",
+    "claude-implementation-summary.md", "implementation_summary.json",
+    "implementation_summary.md", "codex-review.md", "codex-followup.md",
+    "final-summary.md", "final_summary.json", "self-application-notes.md",
+    "git-status.txt", "git.diff", "fix_plan.json", "findings_diff.json",
+    "review.json", "followup.json", "run_summary.json", "run_summary.md",
+}
+
+_META_SUFFIXES = ("-prompt.txt", "-stderr.txt")
+
+
+def list_artifacts(cycle_dir: Path) -> list[Path]:
+    """Return non-meta files from a cycle directory (the actual build artifacts)."""
+    artifacts = []
+    for f in sorted(cycle_dir.iterdir()):
+        if not f.is_file():
+            continue
+        if f.name in _META_FILES:
+            continue
+        if any(f.name.endswith(s) for s in _META_SUFFIXES):
+            continue
+        artifacts.append(f)
+    return artifacts
+
+
+def export_cycle(cfg: Config, cycle_dir: Path, dest: Path) -> dict:
+    """Export cycle artifacts to a destination directory."""
+    import shutil
+    from .config import DEFAULTS
+
+    dest.mkdir(parents=True, exist_ok=True)
+
+    artifacts = list_artifacts(cycle_dir)
+    exported = []
+    for f in artifacts:
+        shutil.copy2(f, dest / f.name)
+        exported.append(f.name)
+
+    # Write devcycle.config.json so dest can be used as a project root
+    meta = _read_meta(cycle_dir)
+    config_data = {
+        "project_name": meta.get("title", cfg.project_name),
+        "cycle_root": DEFAULTS["cycle_root"],
+        "version_history_file": DEFAULTS["version_history_file"],
+        "default_branch": cfg.default_branch,
+        "store_git_diff": cfg.store_git_diff,
+        "store_git_status": cfg.store_git_status,
+    }
+    (dest / "devcycle.config.json").write_text(json.dumps(config_data, indent=2) + "\n")
+
+    return {
+        "cycle_id": meta["cycle_id"],
+        "title": meta.get("title", ""),
+        "exported_files": exported,
+        "dest": str(dest),
+        "config_written": True,
+    }
